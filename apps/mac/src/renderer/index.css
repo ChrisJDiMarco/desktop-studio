@@ -538,3 +538,178 @@ body.artifact-mode {
   color: rgba(255, 255, 255, 0.7);
   font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
 }
+
+/* Status: error */
+
+.artifact-status-error {
+  color: #fca5a5;
+}
+.artifact-status-error .artifact-status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+/* Generated content (markdown) */
+
+.artifact-content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.artifact-content > :first-child {
+  margin-top: 0;
+}
+
+.artifact-content h1,
+.artifact-content h2,
+.artifact-content h3,
+.artifact-content h4 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.artifact-content h1 {
+  font-size: 22px;
+}
+.artifact-content h2 {
+  font-size: 18px;
+}
+.artifact-content h3 {
+  font-size: 15px;
+}
+.artifact-content h4 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.artifact-content p {
+  margin: 0 0 14px;
+}
+
+.artifact-content a {
+  color: #67e8f9;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.4);
+}
+.artifact-content a:hover {
+  border-bottom-color: #67e8f9;
+}
+
+.artifact-content code {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.artifact-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 14px 0;
+  overflow-x: auto;
+}
+
+.artifact-content pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.artifact-content ul,
+.artifact-content ol {
+  margin: 8px 0 14px 22px;
+  padding: 0;
+}
+
+.artifact-content li {
+  margin-bottom: 6px;
+}
+
+.artifact-content blockquote {
+  border-left: 2px solid rgba(34, 211, 238, 0.5);
+  padding: 2px 0 2px 14px;
+  margin: 12px 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+.artifact-content hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 20px 0;
+}
+
+.artifact-content table {
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13px;
+  width: 100%;
+}
+
+.artifact-content th,
+.artifact-content td {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+
+.artifact-content th {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}
+
+/* Error block */
+
+.artifact-error {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.artifact-error h2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fca5a5;
+}
+
+.artifact-error pre {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.artifact-error p {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.artifact-error code {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.85);
+}

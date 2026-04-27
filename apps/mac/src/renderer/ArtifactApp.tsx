@@ -1,4 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+type Phase = "thinking" | "ready" | "error";
+
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MAX_TOKENS = 4096;
 
 function readPromptFromHash() {
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -7,51 +14,110 @@ function readPromptFromHash() {
 
 export default function ArtifactApp() {
   const [prompt] = useState(readPromptFromHash);
-  const [phase, setPhase] = useState<"thinking" | "ready">("thinking");
+  const [phase, setPhase] = useState<Phase>("thinking");
+  const [response, setResponse] = useState("");
+  const [model, setModel] = useState("");
+  const [error, setError] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const startedAt = useMemo(() => Date.now(), []);
 
-  // Phase 4 wires this to the real backend; for now, fake a "Building…"
-  // → "Ready" transition so the spawn flow feels alive.
+  // Tick the elapsed counter while we're waiting on Claude.
   useEffect(() => {
-    const timer = setTimeout(() => setPhase("ready"), 1800);
-    return () => clearTimeout(timer);
-  }, []);
+    if (phase !== "thinking") return;
+    const interval = setInterval(() => {
+      setElapsed((Date.now() - startedAt) / 1000);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [phase, startedAt]);
+
+  // Kick off generation on mount.
+  useEffect(() => {
+    if (!prompt) {
+      setPhase("error");
+      setError("No prompt was provided to this artifact window.");
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await window.desktopStudio.generate({
+          prompt,
+          model: DEFAULT_MODEL,
+          max_tokens: DEFAULT_MAX_TOKENS,
+        });
+        if (cancelled) return;
+        setResponse(result.text ?? "");
+        setModel(result.model ?? DEFAULT_MODEL);
+        setPhase("ready");
+      } catch (e: unknown) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setPhase("error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prompt]);
 
   return (
     <div className="artifact">
       <header className="artifact-titlebar">
-        <span className="artifact-eyebrow">Artifact</span>
+        <span className="artifact-eyebrow">Thinklet</span>
         <span className="artifact-title">{prompt || "Untitled"}</span>
       </header>
+
       <div className="artifact-body">
-        <div className={"artifact-status artifact-status-" + phase}>
-          <span className="artifact-status-dot" />
-          <span>{phase === "thinking" ? "Building…" : "Ready"}</span>
-        </div>
+        <StatusRow phase={phase} elapsed={elapsed} model={model} />
 
-        <h1 className="artifact-prompt">{prompt}</h1>
+        {phase !== "ready" && (
+          <h1 className="artifact-prompt">{prompt}</h1>
+        )}
 
-        <p className="artifact-note">
-          You spawned an artifact window. The full generation pipeline plugs in
-          during Phase 4 of the rollout — from this point on, the renderer is
-          the same shared bundle the pill uses, just routed by the
-          <code> #artifact=</code> URL hash.
-        </p>
+        {phase === "ready" && (
+          <div className="artifact-content">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{response}</ReactMarkdown>
+          </div>
+        )}
 
-        <div className="artifact-meta">
-          <Meta label="Window" value="Independent" />
-          <Meta label="Source" value="Pill submit" />
-          <Meta label="Bundle" value="@desktop-studio/mac renderer" />
-        </div>
+        {phase === "error" && (
+          <div className="artifact-error">
+            <h2>Couldn't generate</h2>
+            <pre>{error}</pre>
+            <p>
+              The Mac app is currently pointing at the local Next.js backend.
+              Make sure the web app is running in another terminal:
+              {" "}
+              <code>pnpm dev:web</code>. Once it's up at{" "}
+              <code>localhost:3000</code>, retry by re-submitting from the pill.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+function StatusRow({
+  phase,
+  elapsed,
+  model,
+}: {
+  phase: Phase;
+  elapsed: number;
+  model: string;
+}) {
   return (
-    <div className="artifact-meta-row">
-      <span className="artifact-meta-label">{label}</span>
-      <span className="artifact-meta-value">{value}</span>
+    <div className={"artifact-status artifact-status-" + phase}>
+      <span className="artifact-status-dot" />
+      <span>
+        {phase === "thinking" && `Generating… ${elapsed.toFixed(1)}s`}
+        {phase === "ready" &&
+          (model ? `Ready · ${model}` : "Ready")}
+        {phase === "error" && "Error"}
+      </span>
     </div>
   );
 }

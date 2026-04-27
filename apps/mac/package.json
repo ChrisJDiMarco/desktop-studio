@@ -32,6 +32,8 @@
     "electron": "^33.0.0",
     "react": "^19",
     "react-dom": "^19",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5",
     "vite": "^5.4.0"

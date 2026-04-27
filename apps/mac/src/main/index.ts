@@ -1,8 +1,11 @@
-import { app, BrowserWindow, globalShortcut, screen, ipcMain } from "electron";
+import { app, BrowserWindow, globalShortcut, screen, ipcMain, shell } from "electron";
 import path from "node:path";
 
 // @ts-expect-error — electron-squirrel-startup ships no .d.ts in some versions
 import started from "electron-squirrel-startup";
+
+import { generate, type GenerateRequest } from "./backend";
+import { getBackendUrl, setBackendUrl } from "./config";
 
 // Forge's Vite plugin injects these at build time.
 declare const PILL_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -168,6 +171,22 @@ ipcMain.handle("pill:set-expanded", (_event, expanded: boolean) => {
 ipcMain.handle("artifact:create", (_event, prompt: string) => {
   if (!prompt || typeof prompt !== "string") return;
   createArtifactWindow(prompt);
+});
+
+ipcMain.handle("backend:generate", async (_event, req: GenerateRequest) => {
+  return generate(req);
+});
+
+ipcMain.handle("config:get-backend-url", () => getBackendUrl());
+
+ipcMain.handle("config:set-backend-url", (_event, url: string) => {
+  if (typeof url !== "string" || !url.trim()) return;
+  setBackendUrl(url.trim());
+});
+
+ipcMain.handle("shell:open-external", (_event, url: string) => {
+  if (typeof url !== "string") return;
+  shell.openExternal(url);
 });
 
 app.whenReady().then(() => {
