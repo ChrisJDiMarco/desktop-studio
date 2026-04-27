@@ -1,10 +1,39 @@
 {
   "name": "@desktop-studio/mac",
+  "productName": "Desktop Studio",
   "private": true,
   "version": "0.0.0",
-  "description": "Desktop Studio macOS Electron app — placeholder; scaffolded in Phase 1",
+  "description": "Desktop Studio macOS Electron app",
+  "main": ".vite/build/main.js",
   "scripts": {
-    "start": "echo 'apps/mac is a placeholder. Implement Phase 1 from MAC_APP_HANDOVER.md (Electron Forge + Vite + TS scaffold).' && exit 1",
-    "make": "echo 'apps/mac is a placeholder.' && exit 1"
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
+  },
+  "devDependencies": {
+    "@desktop-studio/design": "workspace:*",
+    "@electron-forge/cli": "^7.5.0",
+    "@electron-forge/maker-dmg": "^7.5.0",
+    "@electron-forge/maker-zip": "^7.5.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.5.0",
+    "@electron-forge/plugin-fuses": "^7.5.0",
+    "@electron-forge/plugin-vite": "^7.5.0",
+    "@electron-forge/shared-types": "^7.5.0",
+    "@electron/fuses": "^1.8.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^33.0.0",
+    "react": "^19",
+    "react-dom": "^19",
+    "ts-node": "^10.9.2",
+    "typescript": "^5",
+    "vite": "^5.4.0"
   }
 }
