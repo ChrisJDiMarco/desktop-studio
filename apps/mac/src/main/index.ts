@@ -18,8 +18,13 @@ const PILL_HEIGHT_EXPANDED = 320;
 const PILL_BOTTOM_MARGIN = 24;
 const HOTKEY = "Alt+Space";
 
+const ARTIFACT_WIDTH = 560;
+const ARTIFACT_HEIGHT = 420;
+const ARTIFACT_OFFSET_STEP = 28;
+
 let pillWindow: BrowserWindow | null = null;
 let pillExpanded = false;
+let artifactCount = 0;
 
 function pillBoundsFor(expanded: boolean) {
   const { workArea } = screen.getPrimaryDisplay();
@@ -37,13 +42,21 @@ function bringPillToFront() {
   if (!pillWindow) return;
   pillWindow.show();
   pillWindow.moveTop();
-  // Steal focus from the previously frontmost app so typing lands in the pill,
-  // not in the user's last-focused window.
   app.focus({ steal: true });
   pillWindow.focus();
   pillWindow.webContents.focus();
-  // Renderer focuses the actual <input> in response to this signal.
   focusPillInput();
+}
+
+function rendererUrlFor(hash: string) {
+  if (PILL_WINDOW_VITE_DEV_SERVER_URL) {
+    return { type: "url" as const, value: PILL_WINDOW_VITE_DEV_SERVER_URL + hash };
+  }
+  return {
+    type: "file" as const,
+    file: path.join(__dirname, `../renderer/${PILL_WINDOW_VITE_NAME}/index.html`),
+    hash,
+  };
 }
 
 function createPillWindow() {
@@ -61,9 +74,6 @@ function createPillWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
-    // No native vibrancy: it fills the entire rectangular window with a
-    // frosted halo, which leaks past the pill's rounded corners. The pill
-    // draws its own frosted-glass via CSS backdrop-filter instead.
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -76,18 +86,14 @@ function createPillWindow() {
   pillWindow.setAlwaysOnTop(true, "floating");
   pillWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  if (PILL_WINDOW_VITE_DEV_SERVER_URL) {
-    pillWindow.loadURL(PILL_WINDOW_VITE_DEV_SERVER_URL);
+  const target = rendererUrlFor("");
+  if (target.type === "url") {
+    pillWindow.loadURL(target.value);
   } else {
-    pillWindow.loadFile(
-      path.join(__dirname, `../renderer/${PILL_WINDOW_VITE_NAME}/index.html`)
-    );
+    pillWindow.loadFile(target.file);
   }
 
-  pillWindow.once("ready-to-show", () => {
-    bringPillToFront();
-  });
-
+  pillWindow.once("ready-to-show", bringPillToFront);
   pillWindow.on("closed", () => {
     pillWindow = null;
     pillExpanded = false;
@@ -102,10 +108,51 @@ function togglePill() {
   if (pillWindow.isVisible() && pillWindow.isFocused()) {
     pillWindow.hide();
   } else {
-    // Re-pin position in case the work area or display changed since last show.
     pillWindow.setBounds(pillBoundsFor(pillExpanded));
     bringPillToFront();
   }
+}
+
+function createArtifactWindow(prompt: string) {
+  const { workArea } = screen.getPrimaryDisplay();
+  const offset = (artifactCount % 8) * ARTIFACT_OFFSET_STEP;
+  artifactCount++;
+
+  const x = Math.round(workArea.x + (workArea.width - ARTIFACT_WIDTH) / 2 + offset);
+  const y = Math.round(workArea.y + (workArea.height - ARTIFACT_HEIGHT) / 3 + offset);
+
+  const win = new BrowserWindow({
+    width: ARTIFACT_WIDTH,
+    height: ARTIFACT_HEIGHT,
+    minWidth: 360,
+    minHeight: 280,
+    x,
+    y,
+    title: prompt || "Artifact",
+    frame: true,
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 14, y: 14 },
+    vibrancy: "under-window",
+    visualEffectState: "active",
+    backgroundColor: "#00000000",
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  const hash = `#artifact=${encodeURIComponent(prompt)}`;
+  const target = rendererUrlFor(hash);
+  if (target.type === "url") {
+    win.loadURL(target.value);
+  } else {
+    win.loadFile(target.file, { hash: target.hash });
+  }
+
+  win.once("ready-to-show", () => win.show());
 }
 
 ipcMain.on("pill:hide", () => {
@@ -116,6 +163,11 @@ ipcMain.handle("pill:set-expanded", (_event, expanded: boolean) => {
   pillExpanded = !!expanded;
   if (!pillWindow) return;
   pillWindow.setBounds(pillBoundsFor(pillExpanded), true);
+});
+
+ipcMain.handle("artifact:create", (_event, prompt: string) => {
+  if (!prompt || typeof prompt !== "string") return;
+  createArtifactWindow(prompt);
 });
 
 app.whenReady().then(() => {
@@ -138,7 +190,6 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  // Stay alive on macOS — the pill is just hidden, not destroyed.
   if (process.platform !== "darwin") {
     app.quit();
   }

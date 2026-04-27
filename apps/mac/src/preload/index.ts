@@ -4,6 +4,8 @@ const api = {
   hidePill: () => ipcRenderer.send("pill:hide"),
   setExpanded: (expanded: boolean) =>
     ipcRenderer.invoke("pill:set-expanded", expanded),
+  createArtifact: (prompt: string) =>
+    ipcRenderer.invoke("artifact:create", prompt),
   onFocusInput: (cb: () => void) => {
     const handler = () => cb();
     ipcRenderer.on("pill:focus-input", handler);
