@@ -1,26 +1,266 @@
 @import "tailwindcss";
 
+/* ─── DESIGN.md Token Implementation ──────────────────────────────────────── */
+/* All values mirror the YAML front matter in /DESIGN.md.                      */
+/* Token references resolved: {colors.x} → var(--ds-color-x)                  */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-geist-sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-geist-mono: "Geist Mono", "SFMono-Regular", "Cascadia Code", "Fira Code", monospace;
+
+  /* Colors */
+  --ds-color-primary:           #0a0a0b;
+  --ds-color-surface:           #111827;
+  --ds-color-surface-elevated:  #1f2937;
+  --ds-color-surface-overlay:   #0f1117;
+  --ds-color-accent:            #22d3ee;
+  --ds-color-accent-dim:        #0e7490;
+  --ds-color-accent-violet:     #8b5cf6;
+  --ds-color-accent-violet-dim: #5b21b6;
+  --ds-color-neutral:           #9ca3af;
+  --ds-color-border:            rgba(255,255,255,0.10);
+  --ds-color-border-strong:     rgba(255,255,255,0.15);
+  --ds-color-on-primary:        #ffffff;
+  --ds-color-on-surface:        #ffffff;
+  --ds-color-on-accent:         #000000;
+  --ds-color-on-accent-violet:  #ffffff;
+  --ds-color-success:           #22c55e;
+  --ds-color-warning:           #eab308;
+  --ds-color-danger:            #ef4444;
+  --ds-color-info:              #3b82f6;
+
+  /* Typography — font families */
+  --ds-font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --ds-font-mono: var(--font-geist-mono), "Cascadia Code", "Fira Code", monospace;
+
+  /* Typography — sizes */
+  --ds-text-display:    2.25rem;
+  --ds-text-h1:         1.75rem;
+  --ds-text-h2:         1.25rem;
+  --ds-text-h3:         1rem;
+  --ds-text-body-md:    0.875rem;
+  --ds-text-body-sm:    0.75rem;
+  --ds-text-label-caps: 0.625rem;
+  --ds-text-code:       0.8125rem;
+
+  /* Typography — weights */
+  --ds-weight-display:    700;
+  --ds-weight-h1:         700;
+  --ds-weight-h2:         600;
+  --ds-weight-h3:         600;
+  --ds-weight-body:       400;
+  --ds-weight-label-caps: 700;
+
+  /* Typography — tracking */
+  --ds-tracking-tight:      -0.02em;
+  --ds-tracking-normal:      0em;
+  --ds-tracking-label-caps:  0.1em;
+
+  /* Rounded */
+  --ds-rounded-xs:   4px;
+  --ds-rounded-sm:   6px;
+  --ds-rounded-md:   10px;
+  --ds-rounded-lg:   14px;
+  --ds-rounded-xl:   20px;
+  --ds-rounded-full: 9999px;
+
+  /* Spacing */
+  --ds-space-xs:  4px;
+  --ds-space-sm:  8px;
+  --ds-space-md:  12px;
+  --ds-space-lg:  16px;
+  --ds-space-xl:  24px;
+  --ds-space-2xl: 32px;
+  --ds-space-3xl: 48px;
+
+  /* Component: Artifact Window */
+  --ds-artifact-bg:         var(--ds-color-surface);
+  --ds-artifact-radius:     var(--ds-rounded-xl);
+  --ds-artifact-border:     var(--ds-color-border-strong);
+  --ds-artifact-shadow:     0 25px 50px -12px rgba(0,0,0,0.4);
+
+  /* Component: Titlebar */
+  --ds-titlebar-height:     32px;
+  --ds-titlebar-bg:         rgba(255,255,255,0.04);
+  --ds-titlebar-border:     rgba(255,255,255,0.10);
+  --ds-titlebar-text:       rgba(255,255,255,0.60);
+
+  /* Component: Header bar */
+  --ds-header-height:       44px;
+
+  /* Component: Input */
+  --ds-input-bg:            rgba(255,255,255,0.10);
+  --ds-input-border:        rgba(255,255,255,0.15);
+  --ds-input-border-focus:  rgba(34,211,238,0.60);
+  --ds-input-radius:        var(--ds-rounded-md);
+  --ds-input-placeholder:   rgba(255,255,255,0.25);
+
+  /* Legacy compat (used by existing Tailwind theme extension) */
+  --background: var(--ds-color-primary);
+  --foreground: var(--ds-color-on-primary);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--ds-font-sans);
+  --font-mono: var(--ds-font-mono);
+
+  /* Expose ds tokens to Tailwind's JIT via CSS vars */
+  --color-ds-primary:           var(--ds-color-primary);
+  --color-ds-surface:           var(--ds-color-surface);
+  --color-ds-surface-elevated:  var(--ds-color-surface-elevated);
+  --color-ds-accent:            var(--ds-color-accent);
+  --color-ds-accent-violet:     var(--ds-color-accent-violet);
+  --color-ds-neutral:           var(--ds-color-neutral);
+  --color-ds-success:           var(--ds-color-success);
+  --color-ds-warning:           var(--ds-color-warning);
+  --color-ds-danger:            var(--ds-color-danger);
+  --color-ds-info:              var(--ds-color-info);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ─── Base Styles ─────────────────────────────────────────────────────────── */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ds-color-primary);
+  color: var(--ds-color-on-primary);
+  font-family: var(--ds-font-sans);
+  font-size: var(--ds-text-body-md);
+  line-height: 1.6;
 }
+
+/* ─── Design System Utility Classes ──────────────────────────────────────── */
+
+/* Surface layers */
+.ds-surface         { background: var(--ds-color-surface); }
+.ds-surface-elevated { background: var(--ds-color-surface-elevated); }
+
+/* Glassmorphic artifact window */
+.ds-artifact-window {
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--ds-artifact-border);
+  border-radius: var(--ds-artifact-radius);
+  box-shadow: var(--ds-artifact-shadow);
+}
+
+/* Glassmorphic dropdown / popover */
+.ds-dropdown {
+  background: rgba(17, 24, 39, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--ds-color-border-strong);
+  border-radius: var(--ds-rounded-lg);
+  box-shadow: 0 20px 40px -8px rgba(0,0,0,0.5);
+}
+
+/* Accent button (primary CTA) */
+.ds-btn-primary {
+  background: var(--ds-color-accent);
+  color: var(--ds-color-on-accent);
+  border-radius: var(--ds-rounded-md);
+  padding: var(--ds-space-sm) var(--ds-space-lg);
+  font-size: var(--ds-text-body-sm);
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+.ds-btn-primary:hover { background: var(--ds-color-accent-dim); }
+
+/* Ghost button */
+.ds-btn-ghost {
+  background: transparent;
+  color: var(--ds-color-neutral);
+  border-radius: var(--ds-rounded-sm);
+  padding: 6px var(--ds-space-md);
+  font-size: var(--ds-text-body-sm);
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.ds-btn-ghost:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--ds-color-on-surface);
+}
+
+/* Label caps (section headers, badge text, titlebar) */
+.ds-label-caps {
+  font-size: var(--ds-text-label-caps);
+  font-weight: var(--ds-weight-label-caps);
+  letter-spacing: var(--ds-tracking-label-caps);
+  text-transform: uppercase;
+}
+
+/* Input / prompt field */
+.ds-input {
+  background: var(--ds-input-bg);
+  border: 1px solid var(--ds-input-border);
+  border-radius: var(--ds-input-radius);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  color: var(--ds-color-on-surface);
+  font-size: var(--ds-text-body-sm);
+  font-family: var(--ds-font-sans);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.ds-input::placeholder { color: var(--ds-input-placeholder); }
+.ds-input:focus        { border-color: var(--ds-input-border-focus); }
+
+/* Badge */
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.70);
+  border-radius: var(--ds-rounded-full);
+  padding: 2px var(--ds-space-sm);
+  font-size: var(--ds-text-label-caps);
+  font-weight: var(--ds-weight-label-caps);
+  letter-spacing: var(--ds-tracking-label-caps);
+  text-transform: uppercase;
+}
+.ds-badge-accent {
+  background: rgba(34,211,238,0.15);
+  color: #67e8f9;
+  border: 1px solid rgba(34,211,238,0.35);
+}
+.ds-badge-violet {
+  background: rgba(139,92,246,0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139,92,246,0.35);
+}
+
+/* ─── Desktop-specific helpers ────────────────────────────────────────────── */
+
+/* Disable iframe pointer capture during drag/resize */
+body.desktop-dragging [data-desktop-iframe],
+body.desktop-resizing [data-desktop-iframe] {
+  pointer-events: none !important;
+}
+
+/* GPU-accelerate the active dragged artifact only and kill the position
+   transition while the user is moving it — the inline `style.left/top` is
+   updated on every rAF, so any CSS transition fights the cursor and feels
+   laggy. Re-enables on mouseup when the .is-dragging class is removed. */
+[data-artifact-id].is-dragging,
+[data-artifact-id].is-resizing {
+  will-change: transform;
+  transition: none !important;
+}
+
+/* Block text selection across the whole desktop while a drag is in flight so
+   the cursor doesn't accidentally select titles when it leaves the artifact. */
+body.desktop-dragging,
+body.desktop-resizing {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Titlebar traffic-light dots */
+.ds-traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--ds-rounded-full);
+  flex-shrink: 0;
+  transition: filter 0.1s ease;
+}
+.ds-traffic-light:hover { filter: brightness(1.2); }

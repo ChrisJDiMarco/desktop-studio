@@ -1,0 +1,78 @@
+import { BugIcon, DatabaseIcon, MoonIcon, SmartphoneIcon, SparklesIcon, TargetIcon, WandIcon, ZapIcon } from 'lucide-react';
+
+// ─── Studio Prompt Actions ───────────────────────────────────────────────────
+// Module-level so ArtifactWindowInner and the main component can both access it.
+export const DESKTOP_STUDIO_ACTIONS = [
+  {
+    id: 'polish-ui',
+    icon: WandIcon,
+    bg: 'bg-purple-500/20',
+    color: 'text-purple-400',
+    name: 'Polish UI',
+    shortDesc: 'Refine visual design & spacing',
+    prompt: 'Polish the visual design: improve spacing, typography, color contrast, border radii, and overall aesthetics. Make it look polished and professional without changing functionality.',
+  },
+  {
+    id: 'add-animations',
+    icon: SparklesIcon,
+    bg: 'bg-pink-500/20',
+    color: 'text-pink-400',
+    name: 'Add Animations',
+    shortDesc: 'Smooth transitions & micro-interactions',
+    prompt: 'Add smooth CSS animations and micro-interactions: fade-ins, hover effects, button press feedback, and transitions between states. Keep them subtle and performant.',
+  },
+  {
+    id: 'fix-bugs',
+    icon: BugIcon,
+    bg: 'bg-red-500/20',
+    color: 'text-red-400',
+    name: 'Fix & Debug',
+    shortDesc: 'Find and fix any issues',
+    prompt: 'Review the code for bugs, errors, or broken functionality. Fix any issues you find and make sure everything works correctly.',
+  },
+  {
+    id: 'dark-mode',
+    icon: MoonIcon,
+    bg: 'bg-slate-500/20',
+    color: 'text-slate-300',
+    name: 'Dark Mode',
+    shortDesc: 'Add a dark mode toggle',
+    prompt: 'Add a dark mode toggle to this app. Implement a clean dark color scheme and persist the preference. The toggle should be easily accessible.',
+  },
+  {
+    id: 'make-responsive',
+    icon: SmartphoneIcon,
+    bg: 'bg-blue-500/20',
+    color: 'text-blue-400',
+    name: 'Make Responsive',
+    shortDesc: 'Mobile-friendly layout',
+    prompt: 'Make this fully responsive for mobile screens. Adjust layout, font sizes, and spacing so it works great on small screens without breaking the desktop experience.',
+  },
+  {
+    id: 'add-features',
+    icon: ZapIcon,
+    bg: 'bg-yellow-500/20',
+    color: 'text-yellow-400',
+    name: 'Expand Features',
+    shortDesc: 'Add useful new capabilities',
+    prompt: 'Add 2-3 useful new features that complement what this app already does. Make them intuitive and well-integrated with the existing UI.',
+  },
+  {
+    id: 'improve-ux',
+    icon: TargetIcon,
+    bg: 'bg-green-500/20',
+    color: 'text-green-400',
+    name: 'Improve UX',
+    shortDesc: 'Better usability & feedback',
+    prompt: 'Improve the user experience: add loading states, error handling, empty states, confirmation messages, keyboard shortcuts, and helpful tooltips where appropriate.',
+  },
+  {
+    id: 'add-data',
+    icon: DatabaseIcon,
+    bg: 'bg-cyan-500/20',
+    color: 'text-cyan-400',
+    name: 'Add Sample Data',
+    shortDesc: 'Populate with realistic content',
+    prompt: 'Add realistic sample data and content to make the app feel alive and complete. Use plausible names, descriptions, numbers, and dates.',
+  },
+];
