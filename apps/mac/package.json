@@ -16,6 +16,7 @@
     "electron-squirrel-startup": "^1.0.1"
   },
   "devDependencies": {
+    "@desktop-studio/core": "workspace:*",
     "@desktop-studio/design": "workspace:*",
     "@electron-forge/cli": "^7.5.0",
     "@electron-forge/maker-dmg": "^7.5.0",

@@ -1,27 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  detectHtmlArtifactType,
+  buildHtmlArtifactPrompt,
+  type HtmlArtifactType,
+} from "@desktop-studio/core";
 import { ArtifactRenderer } from "./ArtifactRenderer";
 
 type Phase = "thinking" | "ready" | "error";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DEFAULT_MAX_TOKENS = 8192;
-
-/**
- * System-style preamble we glue onto the user's prompt so artifact windows
- * actually render runnable HTML instead of a chat-style description.
- * /api/generate already injects DESIGN.md as the system prompt; this just
- * tells Claude what *shape* of output we want.
- */
-const HTML_ARTIFACT_PREAMBLE = [
-  "Produce a single-file HTML5 artifact that fulfills the user's request below.",
-  "Output ONLY the HTML — start with <!DOCTYPE html>, include any CSS in <style> tags and any JS in <script> tags inside the document.",
-  "Use Tailwind via <script src=\"https://cdn.tailwindcss.com\"></script>.",
-  "Default aesthetic: dark, glassmorphic, generous whitespace, large display typography, vibrant cyan accent. The DESIGN.md system prompt will guide finer details.",
-  "Make it production-quality, mobile-responsive, and interactive where appropriate.",
-  "Do NOT wrap the output in markdown code fences. Do NOT add any explanation. Output raw HTML only.",
-  "",
-  "User request: ",
-].join("\n");
+// Web uses 64000; matching it so apps/mac generates artifacts at the same
+// quality bar (apps/web/components/desktop-mode.jsx:9883).
+const DEFAULT_MAX_TOKENS = 64_000;
 
 function readPromptFromHash() {
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -37,6 +27,12 @@ export default function ArtifactApp() {
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useMemo(() => Date.now(), []);
 
+  const typeInfo: HtmlArtifactType = useMemo(
+    () => detectHtmlArtifactType(prompt || ""),
+    [prompt]
+  );
+
+  // Tick the elapsed counter while we're waiting on Claude.
   useEffect(() => {
     if (phase !== "thinking") return;
     const interval = setInterval(() => {
@@ -45,6 +41,7 @@ export default function ArtifactApp() {
     return () => clearInterval(interval);
   }, [phase, startedAt]);
 
+  // Kick off generation on mount.
   useEffect(() => {
     if (!prompt) {
       setPhase("error");
@@ -56,8 +53,9 @@ export default function ArtifactApp() {
     (async () => {
       try {
         const config = await window.desktopStudio.getConfig();
+        const wrapped = buildHtmlArtifactPrompt(prompt, { typeInfo });
         const result = await window.desktopStudio.generate({
-          prompt: HTML_ARTIFACT_PREAMBLE + prompt,
+          prompt: wrapped,
           model: config.model || DEFAULT_MODEL,
           max_tokens: DEFAULT_MAX_TOKENS,
         });
@@ -75,23 +73,27 @@ export default function ArtifactApp() {
     return () => {
       cancelled = true;
     };
-  }, [prompt]);
+  }, [prompt, typeInfo]);
 
   return (
     <div className="artifact">
       <header className="artifact-titlebar">
-        <span className="artifact-eyebrow">Thinklet</span>
+        <span className="artifact-eyebrow">{typeInfo.kind}</span>
         <span className="artifact-title">{prompt || "Untitled"}</span>
       </header>
 
       <div className={"artifact-body" + (phase === "ready" ? " artifact-body-flush" : "")}>
         <StatusRow phase={phase} elapsed={elapsed} model={model} />
 
-        {phase !== "ready" && (
-          <h1 className="artifact-prompt">{prompt}</h1>
-        )}
+        {phase !== "ready" && <h1 className="artifact-prompt">{prompt}</h1>}
 
-        {phase === "ready" && <ArtifactRenderer content={response} />}
+        {phase === "ready" && (
+          <ArtifactRenderer
+            content={response}
+            fallbackTitle={prompt.slice(0, 30) || "Untitled"}
+            fallbackDims={typeInfo.dims}
+          />
+        )}
 
         {phase === "error" && (
           <div className="artifact-error">

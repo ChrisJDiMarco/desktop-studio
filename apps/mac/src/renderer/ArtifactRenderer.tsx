@@ -1,71 +1,62 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  parseGeneratedHtmlArtifact,
+  buildHtmlArtifactErrorDocument,
+  addIframeNavGuard,
+  injectVisualEditor,
+} from "@desktop-studio/core";
 
-type Kind = "html" | "react" | "markdown" | "text";
-type Detected = { kind: Kind; content: string };
+type Props = {
+  /** Raw text returned by /api/generate (should be a complete HTML document). */
+  content: string;
+  fallbackTitle?: string;
+  fallbackDims?: { w: number; h: number };
+};
 
 /**
- * Models often wrap output in a single ``` fence even when asked not to.
- * Strip a top-level fence wrapper so detection works on the inner payload.
+ * Renders the generation response. The pill submit always asks Claude for HTML
+ * (via buildHtmlArtifactPrompt), so the success path is the iframe. We still
+ * keep a markdown fallback in case the model goes off-script — better than a
+ * blank screen.
  */
-function stripCodeFence(raw: string): string {
-  const trimmed = raw.trim();
-  const fence = trimmed.match(/^```(?:[\w-]+)?\s*\n([\s\S]*?)\n```\s*$/);
-  return fence ? fence[1] : trimmed;
-}
+export function ArtifactRenderer({
+  content,
+  fallbackTitle = "Untitled",
+  fallbackDims = { w: 560, h: 440 },
+}: Props) {
+  const parsed = parseGeneratedHtmlArtifact(content, {
+    fallbackTitle,
+    fallbackWidth: fallbackDims.w,
+    fallbackHeight: fallbackDims.h,
+  });
 
-/**
- * Decide what kind of artifact this content is and extract the renderable
- * payload. Order matters: HTML doc takes precedence over JSX which takes
- * precedence over markdown which takes precedence over plain text.
- */
-function detectAndExtract(raw: string): Detected {
-  const stripped = stripCodeFence(raw);
-
-  // Full HTML document — pull out the doc even if there's extra prose around it.
-  const docMatch = stripped.match(
-    /<!doctype\s+html[\s\S]*?<\/html>\s*/i
-  );
-  if (docMatch) return { kind: "html", content: docMatch[0] };
-  const htmlMatch = stripped.match(/<html[\s>][\s\S]*?<\/html>\s*/i);
-  if (htmlMatch) return { kind: "html", content: htmlMatch[0] };
-
-  // React / Thinklet component (JSX). Tighten up the heuristic a bit so
-  // explanatory prose mentioning "function App()" doesn't false-positive.
-  const looksLikeComponent =
-    /(?:export\s+default\s+function|function\s+App\s*\(|const\s+App\s*=)/.test(
-      stripped
-    ) && /(?:return\s*\(|<[A-Z]\w*[\s/>])/.test(stripped);
-  if (looksLikeComponent) return { kind: "react", content: stripped };
-
-  // Markdown markers
-  const looksLikeMarkdown =
-    /(^|\n)#{1,6}\s|\n```|(^|\n)\*\s|(^|\n)-\s\w|\n>\s/.test(stripped);
-  if (looksLikeMarkdown) return { kind: "markdown", content: stripped };
-
-  return { kind: "text", content: stripped };
-}
-
-export function ArtifactRenderer({ content }: { content: string }) {
-  const detected = detectAndExtract(content);
-
-  switch (detected.kind) {
-    case "html":
-      return <HtmlFrame html={detected.content} />;
-    case "react":
-      return <ReactStub code={detected.content} />;
-    case "markdown":
-      return (
-        <div className="artifact-content">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {detected.content}
-          </ReactMarkdown>
-        </div>
-      );
-    case "text":
-    default:
-      return <pre className="artifact-text">{detected.content}</pre>;
+  if (parsed && parsed.success && typeof parsed.content === "string") {
+    let html: string = parsed.content;
+    html = addIframeNavGuard(html);
+    html = injectVisualEditor(html);
+    return <HtmlFrame html={html} />;
   }
+
+  // The parser failed AND the response doesn't look like HTML at all. Fall back
+  // to markdown so you still see something readable. Most Claude responses
+  // following the master prompt won't hit this path.
+  if (looksLikeMarkdown(content)) {
+    return (
+      <div className="artifact-content">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  // Last-resort: render the parser's friendly error doc inside the iframe so
+  // the user can see what went wrong + the raw response.
+  const errorHtml = buildHtmlArtifactErrorDocument(
+    parsed?.title || fallbackTitle,
+    parsed?.error || "Could not produce a valid HTML document.",
+    typeof content === "string" ? content : ""
+  );
+  return <HtmlFrame html={errorHtml} />;
 }
 
 function HtmlFrame({ html }: { html: string }) {
@@ -74,22 +65,12 @@ function HtmlFrame({ html }: { html: string }) {
       className="artifact-iframe"
       title="Artifact"
       srcDoc={html}
-      sandbox="allow-scripts allow-popups allow-forms allow-same-origin"
+      sandbox="allow-scripts allow-popups allow-forms"
     />
   );
 }
 
-function ReactStub({ code }: { code: string }) {
-  return (
-    <>
-      <div className="artifact-notice">
-        Detected a React / Thinklet component. Inline runtime rendering ports
-        in the next chunk (artifact-runtime → packages/core). For now, here's
-        the source:
-      </div>
-      <pre className="artifact-text artifact-code">
-        <code>{code}</code>
-      </pre>
-    </>
-  );
+function looksLikeMarkdown(text: string) {
+  if (typeof text !== "string") return false;
+  return /(^|\n)#{1,6}\s|\n```|(^|\n)\*\s|(^|\n)-\s\w|\n>\s/.test(text.trim());
 }

@@ -18,6 +18,9 @@ importers:
         specifier: ^1.0.1
         version: 1.0.1
     devDependencies:
+      '@desktop-studio/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@desktop-studio/design':
         specifier: workspace:*
         version: link:../../packages/design

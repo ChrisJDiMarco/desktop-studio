@@ -3,6 +3,7 @@
 
 export * from "./ai-models";
 export * from "./ai-client";
+export * from "./artifact-prompts";
 // JS modules: kept as .js + .d.ts so TS can resolve types without checkJs.
 // (artifact-runtime.js ≈ 700 LOC; artifact-utils.js ≈ 2150 LOC of legacy JS.)
 export * from "./artifact-runtime";
