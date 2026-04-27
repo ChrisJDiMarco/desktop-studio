@@ -91,7 +91,7 @@ export default function PillApp() {
           ref={inputRef}
           type="text"
           className="pill-input"
-          placeholder="Ask anything…"
+          placeholder="Ask for anything... apps, tools, images, notes..."
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
