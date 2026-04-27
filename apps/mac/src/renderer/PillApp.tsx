@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { colors } from "@desktop-studio/design";
-import type { Config } from "../preload";
+
+// Inline Config type — mirrors src/preload/index.ts to avoid a cross-Vite-
+// build type import (preload + renderer are separate Forge bundles).
+type Config = {
+  backendUrl: string;
+  model: string;
+  brandPrompt: string;
+  criticMode: boolean;
+  focusMode: boolean;
+  promptHistory: string[];
+};
 
 // ============== NAVIGATION ==============
 // Web's pill menu has two top-level sections: Tools (15 sub-items) and Jobs.

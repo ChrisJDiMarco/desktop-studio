@@ -104,6 +104,23 @@ function createPillWindow() {
   }
 
   pillWindow.once("ready-to-show", bringPillToFront);
+
+  // In dev (when Vite's URL is set), open DevTools detached so renderer
+  // crashes are visible. The pill window itself is too small to host the
+  // panel inline.
+  if (PILL_WINDOW_VITE_DEV_SERVER_URL) {
+    pillWindow.webContents.openDevTools({ mode: "detach" });
+  }
+
+  // If the renderer fails to load (build error, JS exception in main.tsx),
+  // surface it instead of leaving an invisible transparent window.
+  pillWindow.webContents.on(
+    "render-process-gone",
+    (_e, details) => {
+      console.error("[desktop-studio] Pill renderer crashed:", details);
+    }
+  );
+
   pillWindow.on("closed", () => {
     pillWindow = null;
     pillExpanded = false;
