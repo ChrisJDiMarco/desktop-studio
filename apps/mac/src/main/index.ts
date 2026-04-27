@@ -10,6 +10,7 @@ import {
   setBackendUrl,
   getConfig,
   setConfig,
+  pushPromptHistory,
   type Config,
 } from "./config";
 
@@ -176,7 +177,13 @@ ipcMain.handle("pill:set-expanded", (_event, expanded: boolean) => {
 
 ipcMain.handle("artifact:create", (_event, prompt: string) => {
   if (!prompt || typeof prompt !== "string") return;
+  pushPromptHistory(prompt);
   createArtifactWindow(prompt);
+});
+
+ipcMain.handle("config:push-prompt-history", (_event, prompt: string) => {
+  if (typeof prompt !== "string") return getConfig();
+  return pushPromptHistory(prompt);
 });
 
 ipcMain.handle("backend:generate", async (_event, req: GenerateRequest) => {

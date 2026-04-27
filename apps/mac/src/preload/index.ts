@@ -19,6 +19,10 @@ export type GenerateResponse = {
 export type Config = {
   backendUrl: string;
   model: string;
+  brandPrompt: string;
+  criticMode: boolean;
+  focusMode: boolean;
+  promptHistory: string[];
 };
 
 const api = {
@@ -41,6 +45,8 @@ const api = {
     ipcRenderer.invoke("config:get-backend-url") as Promise<string>,
   setBackendUrl: (url: string) =>
     ipcRenderer.invoke("config:set-backend-url", url) as Promise<void>,
+  pushPromptHistory: (prompt: string) =>
+    ipcRenderer.invoke("config:push-prompt-history", prompt) as Promise<Config>,
 
   // Shell helpers
   openExternal: (url: string) =>

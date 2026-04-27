@@ -858,3 +858,173 @@ body.artifact-mode {
   text-transform: uppercase;
   color: #fca5a5;
 }
+
+.settings-textarea {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.settings-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.settings-textarea:focus {
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ============== TOOLS LIST (two-line items) ============== */
+
+.popup-list-dense {
+  gap: 0;
+  padding: 4px 4px;
+}
+
+.popup-item-twoline {
+  height: auto;
+  min-height: 56px;
+  padding: 10px 12px;
+  align-items: flex-start;
+  text-align: left;
+  gap: 12px;
+}
+
+.popup-item-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.popup-item-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.popup-item-sub {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.popup-item-twoline:hover .popup-item-sub {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* ============== TOGGLE-ROW (in drawer) ============== */
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.toggle-row .row-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ============== COMING SOON ============== */
+
+.coming-soon {
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.coming-soon-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(34, 211, 238, 0.85);
+}
+
+.coming-soon-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.coming-soon-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.coming-soon-hint {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.42);
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+  padding-left: 10px;
+  margin-top: 4px;
+}
+
+.coming-soon-hint code {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============== HISTORY ROWS ============== */
+
+.history-row {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+  display: block;
+}
+
+.history-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: white;
+}
+
+.history-row-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}

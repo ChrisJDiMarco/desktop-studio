@@ -1,22 +1,161 @@
 import { useEffect, useRef, useState } from "react";
 import { colors } from "@desktop-studio/design";
+import type { Config } from "../preload";
 
-type View = "menu" | "tools" | "connect" | "auto" | "jobs" | "settings";
+// ============== NAVIGATION ==============
+// Web's pill menu has two top-level sections: Tools (15 sub-items) and Jobs.
+// Settings is Mac-specific. Anything deeper goes through `navigate()`.
 
-type MenuItem = { id: Exclude<View, "menu">; label: string };
+type ToolId =
+  | "prompt-history"
+  | "data-bus"
+  | "automation-studio"
+  | "artifact-switcher"
+  | "workspace-health"
+  | "workspace-snapshots"
+  | "brand-prompt"
+  | "project-rules"
+  | "design-systems"
+  | "templates"
+  | "connected-apps"
+  | "critic-mode"
+  | "tidy-up"
+  | "bento-arrange"
+  | "focus-mode";
 
-const MENU_ITEMS: MenuItem[] = [
+type View = "menu" | "tools" | "jobs" | "settings" | ToolId;
+
+const TOP_LEVEL: Array<{ id: View; label: string }> = [
   { id: "tools", label: "Tools" },
-  { id: "connect", label: "Connections" },
-  { id: "auto", label: "Automations" },
   { id: "jobs", label: "Jobs" },
   { id: "settings", label: "Settings" },
 ];
+
+// Order matches desktop-mode.jsx Tools dropdown (14334–14591).
+type ToolItem = {
+  id: ToolId;
+  label: string;
+  description: string;
+  // True for items that mutate state inline rather than navigating.
+  inline?: boolean;
+};
+
+const TOOL_ITEMS: ToolItem[] = [
+  {
+    id: "prompt-history",
+    label: "Prompt History",
+    description: "Recent prompts, newest first. Click any to refill the pill.",
+  },
+  {
+    id: "data-bus",
+    label: "Data Bus Monitor",
+    description: "Real-time inspector for cross-artifact pub/sub events.",
+  },
+  {
+    id: "automation-studio",
+    label: "Automation Studio",
+    description: "Visual builder for chaining artifacts into automations.",
+  },
+  {
+    id: "artifact-switcher",
+    label: "Artifact Switcher",
+    description: "Quick switch between open artifact windows (⌘J on web).",
+  },
+  {
+    id: "workspace-health",
+    label: "Workspace Health",
+    description: "Validation + lint surface for current artifacts.",
+  },
+  {
+    id: "workspace-snapshots",
+    label: "Workspace Snapshots",
+    description: "Save and restore the entire canvas state.",
+  },
+  {
+    id: "brand-prompt",
+    label: "Brand Prompt",
+    description: "Persistent brand / project context injected into every call.",
+  },
+  {
+    id: "project-rules",
+    label: "Project Rules",
+    description: "Hard requirements appended to every generation prompt.",
+  },
+  {
+    id: "design-systems",
+    label: "Design Systems",
+    description: "Manage and activate per-project design system overrides.",
+  },
+  {
+    id: "templates",
+    label: "Templates",
+    description: "Pre-built Composio-powered Thinklets you can remix.",
+  },
+  {
+    id: "connected-apps",
+    label: "Connected Apps",
+    description: "OAuth integrations via Composio (Gmail, Slack, Notion, …).",
+  },
+  {
+    id: "critic-mode",
+    label: "Critic Mode",
+    description: "Wrap auto-improve passes with design-quality scoring.",
+  },
+  {
+    id: "tidy-up",
+    label: "Tidy Up",
+    description: "Auto-arrange open artifact windows.",
+    inline: true,
+  },
+  {
+    id: "bento-arrange",
+    label: "Bento Arrange",
+    description: "Pack artifact windows into a bento grid.",
+    inline: true,
+  },
+  {
+    id: "focus-mode",
+    label: "Focus Mode",
+    description: "Fullscreen the most recently opened artifact.",
+  },
+];
+
+function viewParent(v: View): View | null {
+  if (v === "menu") return null;
+  if (v === "tools" || v === "jobs" || v === "settings") return "menu";
+  // tool items hang off "tools"
+  return "tools";
+}
+
+const TOOL_TITLES: Record<View, string> = {
+  menu: "Menu",
+  tools: "Tools",
+  jobs: "Jobs",
+  settings: "Settings",
+  "prompt-history": "Prompt History",
+  "data-bus": "Data Bus Monitor",
+  "automation-studio": "Automation Studio",
+  "artifact-switcher": "Artifact Switcher",
+  "workspace-health": "Workspace Health",
+  "workspace-snapshots": "Workspace Snapshots",
+  "brand-prompt": "Brand Prompt",
+  "project-rules": "Project Rules",
+  "design-systems": "Design Systems",
+  "templates": "Templates",
+  "connected-apps": "Connected Apps",
+  "critic-mode": "Critic Mode",
+  "tidy-up": "Tidy Up",
+  "bento-arrange": "Bento Arrange",
+  "focus-mode": "Focus Mode",
+};
+
+// ============== APP ==============
 
 export default function PillApp() {
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("menu");
+  const [config, setConfig] = useState<Config | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,16 +169,46 @@ export default function PillApp() {
     window.desktopStudio.setExpanded(open);
   }, [open]);
 
+  useEffect(() => {
+    let cancelled = false;
+    window.desktopStudio.getConfig().then((c) => {
+      if (!cancelled) setConfig(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function patchConfig(patch: Partial<Config>) {
+    const next = await window.desktopStudio.setConfig(patch);
+    setConfig(next);
+    return next;
+  }
+
   function closeAndFocus() {
     setOpen(false);
     setView("menu");
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  function navigate(to: View) {
+    setView(to);
+  }
+
+  function back() {
+    const parent = viewParent(view);
+    if (parent) setView(parent);
+    else closeAndFocus();
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Escape") {
       if (open) {
-        closeAndFocus();
+        if (view !== "menu") {
+          back();
+        } else {
+          closeAndFocus();
+        }
       } else {
         window.desktopStudio.hidePill();
       }
@@ -55,8 +224,9 @@ export default function PillApp() {
     if (open) closeAndFocus();
   }
 
-  function handleMenuItemClick(item: MenuItem) {
-    setView(item.id);
+  function handleHistorySelect(prompt: string) {
+    setValue(prompt);
+    closeAndFocus();
   }
 
   return (
@@ -68,19 +238,26 @@ export default function PillApp() {
           onMouseDown={(e) => {
             if (
               e.target instanceof HTMLElement &&
-              e.target.tagName !== "BUTTON" &&
-              e.target.tagName !== "INPUT" &&
-              e.target.tagName !== "SELECT" &&
-              e.target.tagName !== "OPTION"
+              !["BUTTON", "INPUT", "TEXTAREA", "SELECT", "OPTION", "LABEL"].includes(
+                e.target.tagName
+              )
             ) {
               e.preventDefault();
             }
           }}
         >
           {view === "menu" ? (
-            <MenuList items={MENU_ITEMS} onSelect={handleMenuItemClick} />
+            <MenuList items={TOP_LEVEL} onSelect={navigate} />
           ) : (
-            <Drawer view={view} onBack={() => setView("menu")} />
+            <Drawer
+              view={view}
+              onBack={back}
+              config={config}
+              patchConfig={patchConfig}
+              navigate={navigate}
+              onHistorySelect={handleHistorySelect}
+              closeAndFocus={closeAndFocus}
+            />
           )}
         </div>
       )}
@@ -112,75 +289,32 @@ export default function PillApp() {
           aria-expanded={open}
         >
           <span>Menu</span>
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="none"
-            aria-hidden
-          >
-            <path
-              d="M2 6.5L5 3.5L8 6.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <Chevron direction="up" />
         </button>
       </form>
     </div>
   );
 }
 
-function MenuList({
-  items,
-  onSelect,
-}: {
-  items: MenuItem[];
-  onSelect: (item: MenuItem) => void;
-}) {
-  return (
-    <div className="popup-list">
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          role="menuitem"
-          className="popup-item"
-          onClick={() => onSelect(item)}
-        >
-          <span>{item.label}</span>
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
-            <path
-              d="M3.5 2L6.5 5L3.5 8"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      ))}
-    </div>
-  );
-}
+// ============== NAVIGATION SHELL ==============
 
 function Drawer({
   view,
   onBack,
+  config,
+  patchConfig,
+  navigate,
+  onHistorySelect,
+  closeAndFocus,
 }: {
-  view: Exclude<View, "menu">;
+  view: View;
   onBack: () => void;
+  config: Config | null;
+  patchConfig: (patch: Partial<Config>) => Promise<Config>;
+  navigate: (to: View) => void;
+  onHistorySelect: (prompt: string) => void;
+  closeAndFocus: () => void;
 }) {
-  const titles: Record<typeof view, string> = {
-    tools: "Tools",
-    connect: "Connections",
-    auto: "Automations",
-    jobs: "Jobs",
-    settings: "Settings",
-  };
-
   return (
     <div className="drawer">
       <header className="drawer-header">
@@ -190,63 +324,221 @@ function Drawer({
           onClick={onBack}
           aria-label="Back"
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-            <path
-              d="M7.5 2.5L4 6L7.5 9.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <Chevron direction="left" />
         </button>
-        <span className="drawer-title">{titles[view]}</span>
+        <span className="drawer-title">{TOOL_TITLES[view]}</span>
       </header>
       <div className="drawer-body">
-        {view === "tools" && <ToolsDrawer />}
-        {view === "connect" && <ConnectDrawer />}
-        {view === "auto" && <AutoDrawer />}
+        {view === "tools" && (
+          <ToolsList
+            items={TOOL_ITEMS}
+            config={config}
+            onSelect={(item) => {
+              if (item.id === "tidy-up" || item.id === "bento-arrange") {
+                // Stub action — would dispatch to main process to rearrange
+                // artifact windows. Phase 6 wires this up.
+                console.log("[pill]", item.id, "(coming soon)");
+                closeAndFocus();
+                return;
+              }
+              navigate(item.id);
+            }}
+            onToggle={async (item) => {
+              if (item.id === "critic-mode") {
+                await patchConfig({ criticMode: !config?.criticMode });
+              } else if (item.id === "focus-mode") {
+                await patchConfig({ focusMode: !config?.focusMode });
+              }
+            }}
+          />
+        )}
+
         {view === "jobs" && <JobsDrawer />}
-        {view === "settings" && <SettingsDrawer />}
+        {view === "settings" && <SettingsDrawer config={config} patchConfig={patchConfig} />}
+
+        {view === "prompt-history" && (
+          <PromptHistoryDrawer
+            history={config?.promptHistory ?? []}
+            onSelect={onHistorySelect}
+          />
+        )}
+        {view === "brand-prompt" && (
+          <BrandPromptDrawer
+            value={config?.brandPrompt ?? ""}
+            patchConfig={patchConfig}
+          />
+        )}
+        {view === "critic-mode" && (
+          <ToggleDrawer
+            label="Critic Mode"
+            description={
+              "Wrap each auto-improve pass with a design-quality scoring step. Slower but pushes artifacts closer to a polished final form. Mirrors web's desktop-mode.jsx:14539."
+            }
+            on={!!config?.criticMode}
+            onChange={(v) => patchConfig({ criticMode: v })}
+          />
+        )}
+        {view === "focus-mode" && (
+          <ToggleDrawer
+            label="Focus Mode"
+            description={
+              "Fullscreen the most recently opened artifact and dim the rest. Setting persists across launches; the windowing behavior on Mac wires up in a follow-up commit."
+            }
+            on={!!config?.focusMode}
+            onChange={(v) => patchConfig({ focusMode: v })}
+          />
+        )}
+
+        {/* Stub drawers — keep in sync with TOOL_ITEMS descriptions. */}
+        {view === "data-bus" && <ComingSoon item="data-bus" />}
+        {view === "automation-studio" && <ComingSoon item="automation-studio" />}
+        {view === "artifact-switcher" && <ComingSoon item="artifact-switcher" />}
+        {view === "workspace-health" && <ComingSoon item="workspace-health" />}
+        {view === "workspace-snapshots" && <ComingSoon item="workspace-snapshots" />}
+        {view === "project-rules" && <ComingSoon item="project-rules" />}
+        {view === "design-systems" && <ComingSoon item="design-systems" />}
+        {view === "templates" && <ComingSoon item="templates" />}
+        {view === "connected-apps" && <ComingSoon item="connected-apps" />}
       </div>
     </div>
   );
 }
 
-function ToolsDrawer() {
-  const tools = [
-    { id: "search", name: "Web Search", on: true },
-    { id: "image", name: "Image Generation", on: true },
-    { id: "code", name: "Code Interpreter", on: false },
-    { id: "files", name: "File Reader", on: true },
-  ];
+// ============== LIST COMPONENTS ==============
+
+function MenuList({
+  items,
+  onSelect,
+}: {
+  items: Array<{ id: View; label: string }>;
+  onSelect: (id: View) => void;
+}) {
   return (
-    <ul className="row-list">
-      {tools.map((t) => (
-        <li key={t.id} className="row">
-          <span className="row-label">{t.name}</span>
-          <Toggle defaultOn={t.on} />
-        </li>
+    <div className="popup-list">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="menuitem"
+          className="popup-item"
+          onClick={() => onSelect(item.id)}
+        >
+          <span>{item.label}</span>
+          <Chevron direction="right" muted />
+        </button>
       ))}
-    </ul>
+    </div>
   );
 }
 
-function ConnectDrawer() {
-  const services = [
-    { id: "slack", name: "Slack", connected: true },
-    { id: "gmail", name: "Gmail", connected: false },
-    { id: "linkedin", name: "LinkedIn", connected: false },
-    { id: "github", name: "GitHub", connected: true },
-    { id: "notion", name: "Notion", connected: false },
-  ];
+function ToolsList({
+  items,
+  config,
+  onSelect,
+  onToggle,
+}: {
+  items: ToolItem[];
+  config: Config | null;
+  onSelect: (item: ToolItem) => void;
+  onToggle: (item: ToolItem) => void;
+}) {
+  return (
+    <div className="popup-list popup-list-dense">
+      {items.map((item) => {
+        const togglable = item.id === "critic-mode" || item.id === "focus-mode";
+        const on =
+          item.id === "critic-mode"
+            ? !!config?.criticMode
+            : item.id === "focus-mode"
+              ? !!config?.focusMode
+              : false;
+
+        return (
+          <button
+            key={item.id}
+            type="button"
+            role="menuitem"
+            className="popup-item popup-item-twoline"
+            onClick={() => onSelect(item)}
+          >
+            <div className="popup-item-text">
+              <span className="popup-item-label">{item.label}</span>
+              <span className="popup-item-sub">{item.description}</span>
+            </div>
+            {togglable ? (
+              <button
+                type="button"
+                className={"toggle" + (on ? " toggle-on" : "")}
+                role="switch"
+                aria-checked={on}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle(item);
+                }}
+                aria-label={`Toggle ${item.label}`}
+              >
+                <span className="toggle-thumb" />
+              </button>
+            ) : item.inline ? (
+              <span className="chip">Run</span>
+            ) : (
+              <Chevron direction="right" muted />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============== INDIVIDUAL DRAWERS ==============
+
+function ComingSoon({ item }: { item: ToolId }) {
+  const meta = TOOL_ITEMS.find((t) => t.id === item);
+  return (
+    <div className="coming-soon">
+      <div className="coming-soon-eyebrow">Coming soon</div>
+      <div className="coming-soon-title">{meta?.label}</div>
+      <p className="coming-soon-desc">{meta?.description}</p>
+      <p className="coming-soon-hint">
+        This view ships with the next chunk that ports{" "}
+        <code>{TOOL_ITEMS.find((t) => t.id === item)?.id}</code> from
+        apps/web/components/desktop-mode.jsx. The button is here today so the
+        Mac menu structure stays in lockstep with the web Tools dropdown.
+      </p>
+    </div>
+  );
+}
+
+function PromptHistoryDrawer({
+  history,
+  onSelect,
+}: {
+  history: string[];
+  onSelect: (prompt: string) => void;
+}) {
+  if (history.length === 0) {
+    return (
+      <div className="coming-soon">
+        <div className="coming-soon-eyebrow">Empty</div>
+        <p className="coming-soon-desc">
+          Submitted prompts will appear here, newest first. Click any to refill
+          the pill input.
+        </p>
+      </div>
+    );
+  }
   return (
     <ul className="row-list">
-      {services.map((s) => (
-        <li key={s.id} className="row">
-          <span className="row-label">{s.name}</span>
-          <button type="button" className={"chip" + (s.connected ? " chip-on" : "")}>
-            {s.connected ? "Connected" : "Connect"}
+      {history.map((p, i) => (
+        <li key={i}>
+          <button
+            type="button"
+            className="history-row"
+            onClick={() => onSelect(p)}
+            title={p}
+          >
+            <span className="history-row-text">{p}</span>
           </button>
         </li>
       ))}
@@ -254,28 +546,114 @@ function ConnectDrawer() {
   );
 }
 
-function AutoDrawer() {
-  const auto = [
-    { id: "digest", name: "Daily digest", on: true },
-    { id: "report", name: "Weekly report", on: false },
-    { id: "tag", name: "Auto-tag emails", on: true },
-  ];
+function BrandPromptDrawer({
+  value,
+  patchConfig,
+}: {
+  value: string;
+  patchConfig: (patch: Partial<Config>) => Promise<Config>;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  async function save() {
+    setStatus("saving");
+    await patchConfig({ brandPrompt: draft });
+    setStatus("saved");
+    setTimeout(() => setStatus("idle"), 1200);
+  }
+
+  const dirty = draft !== value;
+
   return (
-    <ul className="row-list">
-      {auto.map((a) => (
-        <li key={a.id} className="row">
-          <span className="row-label">{a.name}</span>
-          <Toggle defaultOn={a.on} />
-        </li>
-      ))}
-    </ul>
+    <div className="settings">
+      <div className="settings-row">
+        <label className="settings-label" htmlFor="brand-prompt-textarea">
+          Brand prompt
+        </label>
+        <textarea
+          id="brand-prompt-textarea"
+          className="settings-textarea"
+          rows={6}
+          spellCheck={false}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={
+            "e.g. We're a B2B SaaS for ops teams. Aesthetic: dark, glassmorphic, cyan accent. Tone: confident, technical, no fluff."
+          }
+        />
+        <p className="settings-hint">
+          Prepended as system context to every generation. Web's Tools-menu
+          equivalent at desktop-mode.jsx:14440.
+        </p>
+      </div>
+      <div className="settings-actions">
+        <button
+          type="button"
+          className="chip chip-on settings-save"
+          onClick={save}
+          disabled={!dirty || status === "saving"}
+        >
+          {status === "saving"
+            ? "Saving…"
+            : status === "saved"
+              ? "Saved ✓"
+              : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ToggleDrawer({
+  label,
+  description,
+  on,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="settings">
+      <div className="settings-row">
+        <label className="settings-label">{label}</label>
+        <div className="toggle-row">
+          <span className="row-label">{on ? "On" : "Off"}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            className={"toggle" + (on ? " toggle-on" : "")}
+            onClick={() => onChange(!on)}
+            aria-label={`Toggle ${label}`}
+          >
+            <span className="toggle-thumb" />
+          </button>
+        </div>
+        <p className="settings-hint">{description}</p>
+      </div>
+    </div>
   );
 }
 
 function JobsDrawer() {
+  // Placeholder mock data — wires up to the main process queue when the
+  // generation pipeline grows multi-job tracking.
   const jobs = [
     { id: "1", name: "Email summary", status: "done" as const, when: "5m ago" },
-    { id: "2", name: "Pizza landing page", status: "running" as const, when: "now" },
+    {
+      id: "2",
+      name: "Pizza landing page",
+      status: "running" as const,
+      when: "now",
+    },
     { id: "3", name: "Slack bot scaffold", status: "failed" as const, when: "1h ago" },
   ];
   return (
@@ -285,7 +663,13 @@ function JobsDrawer() {
           <span className="row-label">{j.name}</span>
           <span className={"job-status job-" + j.status}>
             <span className="job-dot" />
-            <span>{j.status === "running" ? "Running" : j.status === "done" ? "Done" : "Failed"}</span>
+            <span>
+              {j.status === "running"
+                ? "Running"
+                : j.status === "done"
+                  ? "Done"
+                  : "Failed"}
+            </span>
             <span className="job-when">{j.when}</span>
           </span>
         </li>
@@ -303,31 +687,32 @@ const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "sonar-pro", label: "Sonar Pro (Perplexity)" },
 ];
 
-function SettingsDrawer() {
-  const [backendUrl, setBackendUrl] = useState("");
-  const [model, setModel] = useState("");
+function SettingsDrawer({
+  config,
+  patchConfig,
+}: {
+  config: Config | null;
+  patchConfig: (patch: Partial<Config>) => Promise<Config>;
+}) {
+  const [backendUrl, setBackendUrl] = useState(config?.backendUrl ?? "");
+  const [model, setModel] = useState(config?.model ?? "");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
     "idle"
   );
   const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-    window.desktopStudio.getConfig().then((cfg) => {
-      if (cancelled) return;
-      setBackendUrl(cfg.backendUrl);
-      setModel(cfg.model);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (config) {
+      setBackendUrl(config.backendUrl);
+      setModel(config.model);
+    }
+  }, [config]);
 
   async function save() {
     setStatus("saving");
     setErrorText("");
     try {
-      const next = await window.desktopStudio.setConfig({ backendUrl, model });
+      const next = await patchConfig({ backendUrl, model });
       setBackendUrl(next.backendUrl);
       setModel(next.model);
       setStatus("saved");
@@ -410,17 +795,39 @@ function SettingsDrawer() {
   );
 }
 
-function Toggle({ defaultOn }: { defaultOn: boolean }) {
-  const [on, setOn] = useState(defaultOn);
+// ============== ATOMS ==============
+
+function Chevron({
+  direction,
+  muted,
+}: {
+  direction: "up" | "down" | "left" | "right";
+  muted?: boolean;
+}) {
+  const d =
+    direction === "up"
+      ? "M2 6.5L5 3.5L8 6.5"
+      : direction === "down"
+        ? "M2 3.5L5 6.5L8 3.5"
+        : direction === "left"
+          ? "M6.5 2L3.5 5L6.5 8"
+          : "M3.5 2L6.5 5L3.5 8";
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      className={"toggle" + (on ? " toggle-on" : "")}
-      onClick={() => setOn((v) => !v)}
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      fill="none"
+      aria-hidden
+      style={muted ? { color: "rgba(255,255,255,0.4)" } : undefined}
     >
-      <span className="toggle-thumb" />
-    </button>
+      <path
+        d={d}
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

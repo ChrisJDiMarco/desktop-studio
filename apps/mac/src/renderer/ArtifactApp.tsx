@@ -53,7 +53,14 @@ export default function ArtifactApp() {
     (async () => {
       try {
         const config = await window.desktopStudio.getConfig();
-        const wrapped = buildHtmlArtifactPrompt(prompt, { typeInfo });
+        const wrapped = buildHtmlArtifactPrompt(prompt, {
+          typeInfo,
+          // Brand prompt persists in config and prepends to every generation
+          // — wired through the shared prompt builder's `systemContext` slot.
+          systemContext: config.brandPrompt
+            ? `BRAND CONTEXT:\n${config.brandPrompt}\n\n`
+            : "",
+        });
         const result = await window.desktopStudio.generate({
           prompt: wrapped,
           model: config.model || DEFAULT_MODEL,
