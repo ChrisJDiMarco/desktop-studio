@@ -13,6 +13,57 @@
  * the canonical block.
  */
 
+// =====================================================================
+// Top-level artifact-kind detector — routes prompts to /api/generate
+// (HTML), /api/generate-image, or /api/generate-video. Mirrors the web
+// app's intent classifier in desktop-mode.jsx.
+// =====================================================================
+
+export type ArtifactKind = "html" | "image" | "video";
+
+export function detectArtifactKind(prompt: string): ArtifactKind {
+  const p = prompt.toLowerCase();
+  // Video patterns first — more specific.
+  if (
+    /\b(video of|generate (a |an )?video|make (a |an )?video|animate (a |an )|create (a |an )?video|short video|clip of)\b/.test(
+      p
+    )
+  ) {
+    return "video";
+  }
+  // Image patterns.
+  if (
+    /\b(image of|picture of|photo of|illustration of|render of|draw (me |a |an )?|generate (a |an )?(image|picture|photo|illustration)|make (me )?(a |an )?(image|picture|photo|illustration)|create (a |an )?(image|picture|photo|illustration))\b/.test(
+      p
+    )
+  ) {
+    return "image";
+  }
+  return "html";
+}
+
+// =====================================================================
+// Image artifact prompt — light wrapper. /api/generate-image takes the
+// prompt almost verbatim; this just lets us prepend brand context the
+// same way the HTML builder does.
+// =====================================================================
+
+export type BuildImageArtifactPromptOptions = {
+  systemContext?: string;
+};
+
+export function buildImageArtifactPrompt(
+  userPrompt: string,
+  opts: BuildImageArtifactPromptOptions = {}
+): string {
+  const ctx = opts.systemContext ?? "";
+  return ctx ? `${ctx.trim()}\n\n${userPrompt}` : userPrompt;
+}
+
+// =====================================================================
+// HTML artifact prompt — verbatim port from desktop-mode.jsx.
+// =====================================================================
+
 export type HtmlArtifactKind =
   | "iOS App"
   | "Android App"

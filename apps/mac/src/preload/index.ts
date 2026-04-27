@@ -36,6 +36,31 @@ const api = {
   // Backend (Next.js / app.thinklet.io)
   generate: (req: GenerateRequest) =>
     ipcRenderer.invoke("backend:generate", req) as Promise<GenerateResponse>,
+  generateImage: (req: {
+    prompt: string;
+    aspectRatio?: string;
+    model?: string;
+  }) =>
+    ipcRenderer.invoke("backend:generate-image", req) as Promise<{
+      url: string;
+      model?: string;
+      aspectRatio?: string;
+    }>,
+  generateVideo: (req: {
+    prompt: string;
+    aspectRatio?: string;
+    duration?: string;
+    quality?: string;
+    resolution?: string;
+    model?: string;
+  }) =>
+    ipcRenderer.invoke("backend:generate-video", req) as Promise<{
+      url: string;
+      videoUrl?: string;
+      provider?: string;
+      model?: string;
+      requestId?: string;
+    }>,
 
   // Config
   getConfig: () => ipcRenderer.invoke("config:get") as Promise<Config>,

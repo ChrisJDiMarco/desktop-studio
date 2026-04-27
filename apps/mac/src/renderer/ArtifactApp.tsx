@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  detectArtifactKind,
   detectHtmlArtifactType,
   buildHtmlArtifactPrompt,
   buildHtmlArtifactRefinePrompt,
   buildHtmlArtifactAutoImprovePrompt,
+  buildImageArtifactPrompt,
+  type ArtifactKind,
   type HtmlArtifactType,
 } from "@desktop-studio/core";
 import { ArtifactRenderer } from "./ArtifactRenderer";
@@ -12,6 +15,7 @@ type Phase = "thinking" | "ready" | "refining" | "error";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 64_000;
+const DEFAULT_IMAGE_ASPECT = "1:1";
 
 function readPromptFromHash() {
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -21,22 +25,41 @@ function readPromptFromHash() {
 export default function ArtifactApp() {
   const [prompt] = useState(readPromptFromHash);
   const [phase, setPhase] = useState<Phase>("thinking");
-  const [response, setResponse] = useState("");
   const [model, setModel] = useState("");
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [refineInput, setRefineInput] = useState("");
   const [priorInstructions, setPriorInstructions] = useState<string[]>([]);
+
+  // HTML branch state
+  const [htmlResponse, setHtmlResponse] = useState("");
+
+  // Image branch state — track URL plus accumulated prompt as the user
+  // refines (image gen has no built-in "edit existing image" so each
+  // refinement re-renders from a longer combined prompt).
+  const [imageUrl, setImageUrl] = useState("");
+  const [imagePrompt, setImagePrompt] = useState(prompt);
+
   const startedAt = useRef(Date.now());
 
-  const typeInfo: HtmlArtifactType = useMemo(
+  const kind: ArtifactKind = useMemo(
+    () => detectArtifactKind(prompt || ""),
+    [prompt]
+  );
+  const htmlTypeInfo: HtmlArtifactType = useMemo(
     () => detectHtmlArtifactType(prompt || ""),
     [prompt]
   );
 
   const isWorking = phase === "thinking" || phase === "refining";
 
-  // Tick the elapsed counter while we're waiting on Claude.
+  const eyebrow =
+    kind === "image"
+      ? "Image"
+      : kind === "video"
+        ? "Video"
+        : htmlTypeInfo.kind;
+
   useEffect(() => {
     if (!isWorking) return;
     const interval = setInterval(() => {
@@ -45,7 +68,7 @@ export default function ArtifactApp() {
     return () => clearInterval(interval);
   }, [isWorking]);
 
-  // Kick off initial generation on mount.
+  // Initial generation on mount.
   useEffect(() => {
     if (!prompt) {
       setPhase("error");
@@ -57,11 +80,30 @@ export default function ArtifactApp() {
     (async () => {
       try {
         const config = await window.desktopStudio.getConfig();
+        const sysCtx = config.brandPrompt
+          ? `BRAND CONTEXT:\n${config.brandPrompt}\n\n`
+          : "";
+
+        if (kind === "image") {
+          const wrapped = buildImageArtifactPrompt(prompt, {
+            systemContext: sysCtx,
+          });
+          setImagePrompt(wrapped);
+          const result = await window.desktopStudio.generateImage({
+            prompt: wrapped,
+            aspectRatio: DEFAULT_IMAGE_ASPECT,
+          });
+          if (cancelled) return;
+          setImageUrl(result.url);
+          setModel(result.model ?? "");
+          setPhase("ready");
+          return;
+        }
+
+        // Default: HTML artifact.
         const wrapped = buildHtmlArtifactPrompt(prompt, {
-          typeInfo,
-          systemContext: config.brandPrompt
-            ? `BRAND CONTEXT:\n${config.brandPrompt}\n\n`
-            : "",
+          typeInfo: htmlTypeInfo,
+          systemContext: sysCtx,
         });
         const result = await window.desktopStudio.generate({
           prompt: wrapped,
@@ -69,7 +111,7 @@ export default function ArtifactApp() {
           max_tokens: DEFAULT_MAX_TOKENS,
         });
         if (cancelled) return;
-        setResponse(result.text ?? "");
+        setHtmlResponse(result.text ?? "");
         setModel(result.model ?? config.model ?? DEFAULT_MODEL);
         setPhase("ready");
       } catch (e: unknown) {
@@ -82,7 +124,7 @@ export default function ArtifactApp() {
     return () => {
       cancelled = true;
     };
-  }, [prompt, typeInfo]);
+  }, [prompt, kind, htmlTypeInfo]);
 
   async function runRefine(instruction: string) {
     if (!instruction.trim() || isWorking) return;
@@ -95,19 +137,35 @@ export default function ArtifactApp() {
 
     try {
       const config = await window.desktopStudio.getConfig();
-      const wrapped = buildHtmlArtifactRefinePrompt(response, trimmed, {
-        systemContext: config.brandPrompt
-          ? `BRAND CONTEXT:\n${config.brandPrompt}\n\n`
-          : "",
-        priorInstructions,
-      });
-      const result = await window.desktopStudio.generate({
-        prompt: wrapped,
-        model: config.model || model || DEFAULT_MODEL,
-        max_tokens: DEFAULT_MAX_TOKENS,
-      });
-      setResponse(result.text ?? "");
-      setModel(result.model ?? config.model ?? model);
+      const sysCtx = config.brandPrompt
+        ? `BRAND CONTEXT:\n${config.brandPrompt}\n\n`
+        : "";
+
+      if (kind === "image") {
+        // Image refines re-render with the original concept + the new
+        // adjustment ("…, but with cooler tones, golden hour lighting").
+        const newPrompt = `${imagePrompt}, ${trimmed}`;
+        setImagePrompt(newPrompt);
+        const result = await window.desktopStudio.generateImage({
+          prompt: newPrompt,
+          aspectRatio: DEFAULT_IMAGE_ASPECT,
+        });
+        setImageUrl(result.url);
+        setModel(result.model ?? model);
+      } else {
+        const wrapped = buildHtmlArtifactRefinePrompt(htmlResponse, trimmed, {
+          systemContext: sysCtx,
+          priorInstructions,
+        });
+        const result = await window.desktopStudio.generate({
+          prompt: wrapped,
+          model: config.model || model || DEFAULT_MODEL,
+          max_tokens: DEFAULT_MAX_TOKENS,
+        });
+        setHtmlResponse(result.text ?? "");
+        setModel(result.model ?? config.model ?? model);
+      }
+
       setPriorInstructions((prev) => [...prev, trimmed]);
       setRefineInput("");
       setPhase("ready");
@@ -118,7 +176,16 @@ export default function ArtifactApp() {
   }
 
   async function runAutoImprove() {
-    if (isWorking || !response) return;
+    if (isWorking || (!htmlResponse && !imageUrl)) return;
+    if (kind === "image") {
+      // For images, "Auto-Improve" means asking for higher quality + finer
+      // detail on the same concept.
+      runRefine(
+        "higher quality, sharper details, better lighting, more refined composition"
+      );
+      return;
+    }
+
     startedAt.current = Date.now();
     setElapsed(0);
     setPhase("refining");
@@ -126,7 +193,7 @@ export default function ArtifactApp() {
 
     try {
       const config = await window.desktopStudio.getConfig();
-      const wrapped = buildHtmlArtifactAutoImprovePrompt(response, {
+      const wrapped = buildHtmlArtifactAutoImprovePrompt(htmlResponse, {
         systemContext: config.brandPrompt
           ? `BRAND CONTEXT:\n${config.brandPrompt}\n\n`
           : "",
@@ -137,7 +204,7 @@ export default function ArtifactApp() {
         model: config.model || model || DEFAULT_MODEL,
         max_tokens: DEFAULT_MAX_TOKENS,
       });
-      setResponse(result.text ?? "");
+      setHtmlResponse(result.text ?? "");
       setModel(result.model ?? config.model ?? model);
       setPriorInstructions((prev) => [...prev, "Auto-Improve pass"]);
       setPhase("ready");
@@ -152,18 +219,24 @@ export default function ArtifactApp() {
     runRefine(refineInput);
   }
 
+  const hasContent = kind === "image" ? !!imageUrl : !!htmlResponse;
+
   return (
     <div className="artifact">
       <header className="artifact-titlebar">
-        <span className="artifact-eyebrow">{typeInfo.kind}</span>
+        <span className="artifact-eyebrow">{eyebrow}</span>
         <span className="artifact-title">{prompt || "Untitled"}</span>
-        {(phase === "ready" || phase === "refining") && (
+        {(phase === "ready" || phase === "refining") && hasContent && (
           <button
             type="button"
             className="artifact-titlebar-btn"
             onClick={runAutoImprove}
             disabled={isWorking}
-            title="Auto-Improve: re-run with a 'make this look like a premium, shipped product' polish pass"
+            title={
+              kind === "image"
+                ? "Re-render with sharper detail + better composition"
+                : "Re-run with a 'make this look like a premium, shipped product' polish pass"
+            }
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
               <path
@@ -183,46 +256,47 @@ export default function ArtifactApp() {
       <div
         className={
           "artifact-body" +
-          (phase === "ready" || phase === "refining"
-            ? " artifact-body-flush"
-            : "")
+          (phase === "ready" || phase === "refining" ? " artifact-body-flush" : "")
         }
       >
         <StatusRow phase={phase} elapsed={elapsed} model={model} />
 
-        {phase === "thinking" && (
-          <h1 className="artifact-prompt">{prompt}</h1>
-        )}
+        {phase === "thinking" && <h1 className="artifact-prompt">{prompt}</h1>}
 
         {(phase === "ready" || phase === "refining") && (
           <>
             <div
               className={"artifact-content-wrap" + (phase === "refining" ? " is-refining" : "")}
             >
-              <ArtifactRenderer
-                content={response}
-                fallbackTitle={prompt.slice(0, 30) || "Untitled"}
-                fallbackDims={typeInfo.dims}
-              />
+              {kind === "image" ? (
+                <ImageArtifactView url={imageUrl} alt={prompt} />
+              ) : (
+                <ArtifactRenderer
+                  content={htmlResponse}
+                  fallbackTitle={prompt.slice(0, 30) || "Untitled"}
+                  fallbackDims={htmlTypeInfo.dims}
+                />
+              )}
               {phase === "refining" && (
                 <div className="artifact-refine-overlay">
                   <span className="artifact-refine-overlay-dot" />
-                  <span>Refining…</span>
+                  <span>{kind === "image" ? "Re-rendering…" : "Refining…"}</span>
                 </div>
               )}
             </div>
 
-            <form
-              className="artifact-refine-bar"
-              onSubmit={handleRefineSubmit}
-            >
+            <form className="artifact-refine-bar" onSubmit={handleRefineSubmit}>
               <input
                 type="text"
                 className="artifact-refine-input"
                 placeholder={
                   phase === "refining"
-                    ? "Refining… please wait"
-                    : "Refine this artifact… (e.g. \"make the buttons cyan\", \"add a testimonials section\")"
+                    ? kind === "image"
+                      ? "Re-rendering… please wait"
+                      : "Refining… please wait"
+                    : kind === "image"
+                      ? "Refine this image… (e.g. \"warmer tones\", \"add a foreground element\")"
+                      : "Refine this artifact… (e.g. \"make the buttons cyan\")"
                 }
                 value={refineInput}
                 onChange={(e) => setRefineInput(e.target.value)}
@@ -250,7 +324,7 @@ export default function ArtifactApp() {
               For local development, make sure the web app is running with{" "}
               <code>pnpm dev:web</code> at <code>localhost:3000</code>.
             </p>
-            {response && (
+            {hasContent && (
               <button
                 type="button"
                 className="chip chip-on"
@@ -269,6 +343,14 @@ export default function ArtifactApp() {
   );
 }
 
+function ImageArtifactView({ url, alt }: { url: string; alt: string }) {
+  return (
+    <div className="artifact-image-frame">
+      <img src={url} alt={alt} className="artifact-image" />
+    </div>
+  );
+}
+
 function StatusRow({
   phase,
   elapsed,
@@ -279,8 +361,9 @@ function StatusRow({
   model: string;
 }) {
   const cls =
-    phase === "refining" ? "artifact-status artifact-status-thinking"
-    : "artifact-status artifact-status-" + phase;
+    phase === "refining"
+      ? "artifact-status artifact-status-thinking"
+      : "artifact-status artifact-status-" + phase;
   return (
     <div className={cls}>
       <span className="artifact-status-dot" />

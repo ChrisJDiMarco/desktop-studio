@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { colors } from "@desktop-studio/design";
 
 // Inline Config type — mirrors src/preload/index.ts to avoid a cross-Vite-
@@ -13,8 +13,6 @@ type Config = {
 };
 
 // ============== NAVIGATION ==============
-// Web's pill menu has two top-level sections: Tools (15 sub-items) and Jobs.
-// Settings is Mac-specific. Anything deeper goes through `navigate()`.
 
 type ToolId =
   | "prompt-history"
@@ -35,109 +33,175 @@ type ToolId =
 
 type View = "menu" | "tools" | "jobs" | "settings" | ToolId;
 
-const TOP_LEVEL: Array<{ id: View; label: string }> = [
-  { id: "tools", label: "Tools" },
-  { id: "jobs", label: "Jobs" },
-  { id: "settings", label: "Settings" },
+const TOP_LEVEL: Array<{ id: View; label: string; icon: IconName; description: string }> = [
+  {
+    id: "tools",
+    label: "Tools",
+    icon: "sliders",
+    description: "Workspace, project, and AI controls",
+  },
+  {
+    id: "jobs",
+    label: "Jobs",
+    icon: "activity",
+    description: "Active and recent generation jobs",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: "settings",
+    description: "Backend URL and default model",
+  },
 ];
 
-// Order matches desktop-mode.jsx Tools dropdown (14334–14591).
 type ToolItem = {
   id: ToolId;
   label: string;
   description: string;
-  // True for items that mutate state inline rather than navigating.
+  icon: IconName;
   inline?: boolean;
 };
 
-const TOOL_ITEMS: ToolItem[] = [
+type ToolSection = {
+  id: string;
+  label: string;
+  items: ToolItem[];
+};
+
+// Order within sections preserves web's overall priority but groups for
+// browsability. Web's flat list is at desktop-mode.jsx:14334–14591.
+const TOOL_SECTIONS: ToolSection[] = [
   {
-    id: "prompt-history",
-    label: "Prompt History",
-    description: "Recent prompts, newest first. Click any to refill the pill.",
+    id: "workspace",
+    label: "Workspace",
+    items: [
+      {
+        id: "tidy-up",
+        label: "Tidy Up",
+        description: "Auto-arrange open artifact windows.",
+        icon: "wind",
+        inline: true,
+      },
+      {
+        id: "bento-arrange",
+        label: "Bento Arrange",
+        description: "Pack artifact windows into a bento grid.",
+        icon: "grid",
+        inline: true,
+      },
+      {
+        id: "focus-mode",
+        label: "Focus Mode",
+        description: "Fullscreen the most recently opened artifact.",
+        icon: "eye",
+      },
+      {
+        id: "workspace-health",
+        label: "Workspace Health",
+        description: "Validation + lint surface for current artifacts.",
+        icon: "shield",
+      },
+      {
+        id: "workspace-snapshots",
+        label: "Workspace Snapshots",
+        description: "Save and restore the entire canvas state.",
+        icon: "camera",
+      },
+      {
+        id: "artifact-switcher",
+        label: "Artifact Switcher",
+        description: "Quick switch between open artifact windows (⌘J on web).",
+        icon: "search",
+      },
+    ],
   },
   {
-    id: "data-bus",
-    label: "Data Bus Monitor",
-    description: "Real-time inspector for cross-artifact pub/sub events.",
+    id: "project",
+    label: "Project",
+    items: [
+      {
+        id: "brand-prompt",
+        label: "Brand Prompt",
+        description: "Persistent brand / project context injected into every call.",
+        icon: "file-text",
+      },
+      {
+        id: "project-rules",
+        label: "Project Rules",
+        description: "Hard requirements appended to every generation prompt.",
+        icon: "bookmark",
+      },
+      {
+        id: "design-systems",
+        label: "Design Systems",
+        description: "Manage and activate per-project design system overrides.",
+        icon: "palette",
+      },
+      {
+        id: "critic-mode",
+        label: "Critic Mode",
+        description: "Wrap auto-improve passes with design-quality scoring.",
+        icon: "flask",
+      },
+    ],
   },
   {
-    id: "automation-studio",
-    label: "Automation Studio",
-    description: "Visual builder for chaining artifacts into automations.",
+    id: "library",
+    label: "Library",
+    items: [
+      {
+        id: "templates",
+        label: "Templates",
+        description: "Pre-built Composio-powered Thinklets you can remix.",
+        icon: "sparkles",
+      },
+      {
+        id: "connected-apps",
+        label: "Connected Apps",
+        description: "OAuth integrations via Composio (Gmail, Slack, Notion, …).",
+        icon: "zap",
+      },
+      {
+        id: "automation-studio",
+        label: "Automation Studio",
+        description: "Visual builder for chaining artifacts into automations.",
+        icon: "git-branch",
+      },
+    ],
   },
   {
-    id: "artifact-switcher",
-    label: "Artifact Switcher",
-    description: "Quick switch between open artifact windows (⌘J on web).",
-  },
-  {
-    id: "workspace-health",
-    label: "Workspace Health",
-    description: "Validation + lint surface for current artifacts.",
-  },
-  {
-    id: "workspace-snapshots",
-    label: "Workspace Snapshots",
-    description: "Save and restore the entire canvas state.",
-  },
-  {
-    id: "brand-prompt",
-    label: "Brand Prompt",
-    description: "Persistent brand / project context injected into every call.",
-  },
-  {
-    id: "project-rules",
-    label: "Project Rules",
-    description: "Hard requirements appended to every generation prompt.",
-  },
-  {
-    id: "design-systems",
-    label: "Design Systems",
-    description: "Manage and activate per-project design system overrides.",
-  },
-  {
-    id: "templates",
-    label: "Templates",
-    description: "Pre-built Composio-powered Thinklets you can remix.",
-  },
-  {
-    id: "connected-apps",
-    label: "Connected Apps",
-    description: "OAuth integrations via Composio (Gmail, Slack, Notion, …).",
-  },
-  {
-    id: "critic-mode",
-    label: "Critic Mode",
-    description: "Wrap auto-improve passes with design-quality scoring.",
-  },
-  {
-    id: "tidy-up",
-    label: "Tidy Up",
-    description: "Auto-arrange open artifact windows.",
-    inline: true,
-  },
-  {
-    id: "bento-arrange",
-    label: "Bento Arrange",
-    description: "Pack artifact windows into a bento grid.",
-    inline: true,
-  },
-  {
-    id: "focus-mode",
-    label: "Focus Mode",
-    description: "Fullscreen the most recently opened artifact.",
+    id: "activity",
+    label: "Activity",
+    items: [
+      {
+        id: "prompt-history",
+        label: "Prompt History",
+        description: "Recent prompts, newest first. Click any to refill the pill.",
+        icon: "clock",
+      },
+      {
+        id: "data-bus",
+        label: "Data Bus Monitor",
+        description: "Real-time inspector for cross-artifact pub/sub events.",
+        icon: "broadcast",
+      },
+    ],
   },
 ];
+
+const ALL_TOOL_ITEMS: ToolItem[] = TOOL_SECTIONS.flatMap((s) => s.items);
+
+function findTool(id: ToolId): ToolItem | undefined {
+  return ALL_TOOL_ITEMS.find((t) => t.id === id);
+}
 
 function viewParent(v: View): View | null {
   if (v === "menu") return null;
   if (v === "tools" || v === "jobs" || v === "settings") return "menu";
-  // tool items hang off "tools"
   return "tools";
 }
 
-const TOOL_TITLES: Record<View, string> = {
+const VIEW_TITLES: Record<View, string> = {
   menu: "Menu",
   tools: "Tools",
   jobs: "Jobs",
@@ -151,7 +215,7 @@ const TOOL_TITLES: Record<View, string> = {
   "brand-prompt": "Brand Prompt",
   "project-rules": "Project Rules",
   "design-systems": "Design Systems",
-  "templates": "Templates",
+  templates: "Templates",
   "connected-apps": "Connected Apps",
   "critic-mode": "Critic Mode",
   "tidy-up": "Tidy Up",
@@ -257,7 +321,7 @@ export default function PillApp() {
           }}
         >
           {view === "menu" ? (
-            <MenuList items={TOP_LEVEL} onSelect={navigate} />
+            <TopMenu items={TOP_LEVEL} onSelect={navigate} />
           ) : (
             <Drawer
               view={view}
@@ -325,6 +389,10 @@ function Drawer({
   onHistorySelect: (prompt: string) => void;
   closeAndFocus: () => void;
 }) {
+  const tool = view !== "menu" && view !== "tools" && view !== "jobs" && view !== "settings"
+    ? findTool(view as ToolId)
+    : undefined;
+
   return (
     <div className="drawer">
       <header className="drawer-header">
@@ -336,17 +404,20 @@ function Drawer({
         >
           <Chevron direction="left" />
         </button>
-        <span className="drawer-title">{TOOL_TITLES[view]}</span>
+        <div className="drawer-header-text">
+          <span className="drawer-eyebrow">
+            {viewParent(view) === "tools" ? "Tools" : ""}
+          </span>
+          <span className="drawer-title">{VIEW_TITLES[view]}</span>
+        </div>
       </header>
       <div className="drawer-body">
         {view === "tools" && (
           <ToolsList
-            items={TOOL_ITEMS}
+            sections={TOOL_SECTIONS}
             config={config}
             onSelect={(item) => {
               if (item.id === "tidy-up" || item.id === "bento-arrange") {
-                // Stub action — would dispatch to main process to rearrange
-                // artifact windows. Phase 6 wires this up.
                 console.log("[pill]", item.id, "(coming soon)");
                 closeAndFocus();
                 return;
@@ -364,7 +435,9 @@ function Drawer({
         )}
 
         {view === "jobs" && <JobsDrawer />}
-        {view === "settings" && <SettingsDrawer config={config} patchConfig={patchConfig} />}
+        {view === "settings" && (
+          <SettingsDrawer config={config} patchConfig={patchConfig} />
+        )}
 
         {view === "prompt-history" && (
           <PromptHistoryDrawer
@@ -381,9 +454,7 @@ function Drawer({
         {view === "critic-mode" && (
           <ToggleDrawer
             label="Critic Mode"
-            description={
-              "Wrap each auto-improve pass with a design-quality scoring step. Slower but pushes artifacts closer to a polished final form. Mirrors web's desktop-mode.jsx:14539."
-            }
+            description="Wrap each auto-improve pass with a design-quality scoring step. Slower but pushes artifacts closer to a polished final form. Mirrors web's desktop-mode.jsx:14539."
             on={!!config?.criticMode}
             onChange={(v) => patchConfig({ criticMode: v })}
           />
@@ -391,49 +462,52 @@ function Drawer({
         {view === "focus-mode" && (
           <ToggleDrawer
             label="Focus Mode"
-            description={
-              "Fullscreen the most recently opened artifact and dim the rest. Setting persists across launches; the windowing behavior on Mac wires up in a follow-up commit."
-            }
+            description="Fullscreen the most recently opened artifact and dim the rest. Setting persists across launches; the windowing behavior on Mac wires up in a follow-up commit."
             on={!!config?.focusMode}
             onChange={(v) => patchConfig({ focusMode: v })}
           />
         )}
 
-        {/* Stub drawers — keep in sync with TOOL_ITEMS descriptions. */}
-        {view === "data-bus" && <ComingSoon item="data-bus" />}
-        {view === "automation-studio" && <ComingSoon item="automation-studio" />}
-        {view === "artifact-switcher" && <ComingSoon item="artifact-switcher" />}
-        {view === "workspace-health" && <ComingSoon item="workspace-health" />}
-        {view === "workspace-snapshots" && <ComingSoon item="workspace-snapshots" />}
-        {view === "project-rules" && <ComingSoon item="project-rules" />}
-        {view === "design-systems" && <ComingSoon item="design-systems" />}
-        {view === "templates" && <ComingSoon item="templates" />}
-        {view === "connected-apps" && <ComingSoon item="connected-apps" />}
+        {view === "data-bus" && tool && <ComingSoon tool={tool} />}
+        {view === "automation-studio" && tool && <ComingSoon tool={tool} />}
+        {view === "artifact-switcher" && tool && <ComingSoon tool={tool} />}
+        {view === "workspace-health" && tool && <ComingSoon tool={tool} />}
+        {view === "workspace-snapshots" && tool && <ComingSoon tool={tool} />}
+        {view === "project-rules" && tool && <ComingSoon tool={tool} />}
+        {view === "design-systems" && tool && <ComingSoon tool={tool} />}
+        {view === "templates" && tool && <ComingSoon tool={tool} />}
+        {view === "connected-apps" && tool && <ComingSoon tool={tool} />}
       </div>
     </div>
   );
 }
 
-// ============== LIST COMPONENTS ==============
+// ============== TOP-LEVEL MENU ==============
 
-function MenuList({
+function TopMenu({
   items,
   onSelect,
 }: {
-  items: Array<{ id: View; label: string }>;
+  items: Array<{ id: View; label: string; icon: IconName; description: string }>;
   onSelect: (id: View) => void;
 }) {
   return (
-    <div className="popup-list">
+    <div className="top-menu">
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
           role="menuitem"
-          className="popup-item"
+          className="top-menu-item"
           onClick={() => onSelect(item.id)}
         >
-          <span>{item.label}</span>
+          <span className="top-menu-icon">
+            <Icon name={item.icon} size={16} />
+          </span>
+          <div className="top-menu-text">
+            <span className="top-menu-label">{item.label}</span>
+            <span className="top-menu-sub">{item.description}</span>
+          </div>
           <Chevron direction="right" muted />
         </button>
       ))}
@@ -441,80 +515,94 @@ function MenuList({
   );
 }
 
+// ============== TOOLS LIST WITH SECTIONS ==============
+
 function ToolsList({
-  items,
+  sections,
   config,
   onSelect,
   onToggle,
 }: {
-  items: ToolItem[];
+  sections: ToolSection[];
   config: Config | null;
   onSelect: (item: ToolItem) => void;
   onToggle: (item: ToolItem) => void;
 }) {
   return (
-    <div className="popup-list popup-list-dense">
-      {items.map((item) => {
-        const togglable = item.id === "critic-mode" || item.id === "focus-mode";
-        const on =
-          item.id === "critic-mode"
-            ? !!config?.criticMode
-            : item.id === "focus-mode"
-              ? !!config?.focusMode
-              : false;
+    <div className="tools-list">
+      {sections.map((section) => (
+        <section key={section.id} className="tools-section">
+          <header className="tools-section-header">{section.label}</header>
+          <div className="tools-section-items">
+            {section.items.map((item) => {
+              const togglable = item.id === "critic-mode" || item.id === "focus-mode";
+              const on =
+                item.id === "critic-mode"
+                  ? !!config?.criticMode
+                  : item.id === "focus-mode"
+                    ? !!config?.focusMode
+                    : false;
 
-        return (
-          <button
-            key={item.id}
-            type="button"
-            role="menuitem"
-            className="popup-item popup-item-twoline"
-            onClick={() => onSelect(item)}
-          >
-            <div className="popup-item-text">
-              <span className="popup-item-label">{item.label}</span>
-              <span className="popup-item-sub">{item.description}</span>
-            </div>
-            {togglable ? (
-              <button
-                type="button"
-                className={"toggle" + (on ? " toggle-on" : "")}
-                role="switch"
-                aria-checked={on}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggle(item);
-                }}
-                aria-label={`Toggle ${item.label}`}
-              >
-                <span className="toggle-thumb" />
-              </button>
-            ) : item.inline ? (
-              <span className="chip">Run</span>
-            ) : (
-              <Chevron direction="right" muted />
-            )}
-          </button>
-        );
-      })}
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="menuitem"
+                  className="tools-item"
+                  onClick={() => onSelect(item)}
+                >
+                  <span className="tools-item-icon">
+                    <Icon name={item.icon} size={14} />
+                  </span>
+                  <div className="tools-item-text">
+                    <span className="tools-item-label">{item.label}</span>
+                    <span className="tools-item-sub">{item.description}</span>
+                  </div>
+                  {togglable ? (
+                    <button
+                      type="button"
+                      className={"toggle" + (on ? " toggle-on" : "")}
+                      role="switch"
+                      aria-checked={on}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggle(item);
+                      }}
+                      aria-label={`Toggle ${item.label}`}
+                    >
+                      <span className="toggle-thumb" />
+                    </button>
+                  ) : item.inline ? (
+                    <span className="chip tools-item-chip">Run</span>
+                  ) : (
+                    <Chevron direction="right" muted />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
 
 // ============== INDIVIDUAL DRAWERS ==============
 
-function ComingSoon({ item }: { item: ToolId }) {
-  const meta = TOOL_ITEMS.find((t) => t.id === item);
+function ComingSoon({ tool }: { tool: ToolItem }) {
   return (
     <div className="coming-soon">
+      <span className="coming-soon-bubble">
+        <Icon name={tool.icon} size={20} />
+      </span>
       <div className="coming-soon-eyebrow">Coming soon</div>
-      <div className="coming-soon-title">{meta?.label}</div>
-      <p className="coming-soon-desc">{meta?.description}</p>
+      <div className="coming-soon-title">{tool.label}</div>
+      <p className="coming-soon-desc">{tool.description}</p>
       <p className="coming-soon-hint">
         This view ships with the next chunk that ports{" "}
-        <code>{TOOL_ITEMS.find((t) => t.id === item)?.id}</code> from
-        apps/web/components/desktop-mode.jsx. The button is here today so the
-        Mac menu structure stays in lockstep with the web Tools dropdown.
+        <code>{tool.id}</code> from apps/web/components/desktop-mode.jsx. The
+        button is here today so the Mac menu structure stays in lockstep with
+        the web Tools dropdown.
       </p>
     </div>
   );
@@ -530,6 +618,9 @@ function PromptHistoryDrawer({
   if (history.length === 0) {
     return (
       <div className="coming-soon">
+        <span className="coming-soon-bubble">
+          <Icon name="clock" size={20} />
+        </span>
         <div className="coming-soon-eyebrow">Empty</div>
         <p className="coming-soon-desc">
           Submitted prompts will appear here, newest first. Click any to refill
@@ -654,8 +745,6 @@ function ToggleDrawer({
 }
 
 function JobsDrawer() {
-  // Placeholder mock data — wires up to the main process queue when the
-  // generation pipeline grows multi-job tracking.
   const jobs = [
     { id: "1", name: "Email summary", status: "done" as const, when: "5m ago" },
     {
@@ -802,6 +891,149 @@ function SettingsDrawer({
         )}
       </div>
     </div>
+  );
+}
+
+// ============== ICONS ==============
+
+type IconName =
+  | "clock"
+  | "broadcast"
+  | "git-branch"
+  | "search"
+  | "shield"
+  | "camera"
+  | "file-text"
+  | "bookmark"
+  | "palette"
+  | "sparkles"
+  | "zap"
+  | "flask"
+  | "wind"
+  | "grid"
+  | "eye"
+  | "sliders"
+  | "activity"
+  | "settings";
+
+const ICONS: Record<IconName, ReactNode> = {
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </>
+  ),
+  broadcast: (
+    <>
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14" />
+    </>
+  ),
+  "git-branch": (
+    <>
+      <line x1="6" y1="3" x2="6" y2="15" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </>
+  ),
+  shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
+  camera: (
+    <>
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
+    </>
+  ),
+  "file-text": (
+    <>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </>
+  ),
+  bookmark: <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />,
+  palette: (
+    <>
+      <circle cx="13.5" cy="6.5" r=".75" fill="currentColor" />
+      <circle cx="17.5" cy="10.5" r=".75" fill="currentColor" />
+      <circle cx="8.5" cy="7.5" r=".75" fill="currentColor" />
+      <circle cx="6.5" cy="12.5" r=".75" fill="currentColor" />
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.13-.29-.29-.44-.65-.44-1.12a1.64 1.64 0 0 1 1.67-1.67h1.99c3.05 0 5.55-2.5 5.55-5.55C21.96 6.01 17.46 2 12 2z" />
+    </>
+  ),
+  sparkles: (
+    <>
+      <path d="M12 3v3m0 12v3m9-9h-3M6 12H3m13.95-6.95-2.12 2.12m-9.66 9.66L5.05 18.95m13.9 0-2.12-2.12m-9.66-9.66L5.05 5.05" />
+      <path d="M12 8.5l1.5 3 3 1.5-3 1.5L12 17.5l-1.5-3-3-1.5 3-1.5L12 8.5z" />
+    </>
+  ),
+  zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
+  flask: (
+    <path d="M9 2h6m-3 0v7.5L4.5 18a2 2 0 0 0 1.732 3h11.536a2 2 0 0 0 1.732-3L12 9.5" />
+  ),
+  wind: (
+    <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
+  ),
+  grid: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  sliders: (
+    <>
+      <line x1="4" y1="21" x2="4" y2="14" />
+      <line x1="4" y1="10" x2="4" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12" y2="3" />
+      <line x1="20" y1="21" x2="20" y2="16" />
+      <line x1="20" y1="12" x2="20" y2="3" />
+      <line x1="1" y1="14" x2="7" y2="14" />
+      <line x1="9" y1="8" x2="15" y2="8" />
+      <line x1="17" y1="16" x2="23" y2="16" />
+    </>
+  ),
+  activity: (
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </>
+  ),
+};
+
+function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {ICONS[name]}
+    </svg>
   );
 }
 

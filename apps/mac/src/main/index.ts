@@ -4,7 +4,14 @@ import path from "node:path";
 // @ts-expect-error — electron-squirrel-startup ships no .d.ts in some versions
 import started from "electron-squirrel-startup";
 
-import { generate, type GenerateRequest } from "./backend";
+import {
+  generate,
+  generateImage,
+  generateVideo,
+  type GenerateRequest,
+  type GenerateImageRequest,
+  type GenerateVideoRequest,
+} from "./backend";
 import {
   getBackendUrl,
   setBackendUrl,
@@ -206,6 +213,20 @@ ipcMain.handle("config:push-prompt-history", (_event, prompt: string) => {
 ipcMain.handle("backend:generate", async (_event, req: GenerateRequest) => {
   return generate(req);
 });
+
+ipcMain.handle(
+  "backend:generate-image",
+  async (_event, req: GenerateImageRequest) => {
+    return generateImage(req);
+  }
+);
+
+ipcMain.handle(
+  "backend:generate-video",
+  async (_event, req: GenerateVideoRequest) => {
+    return generateVideo(req);
+  }
+);
 
 ipcMain.handle("config:get-backend-url", () => getBackendUrl());
 
