@@ -1,0 +1,15 @@
+{
+  "name": "@desktop-studio/ui",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Shared React UI components used by both apps/web and apps/mac",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}

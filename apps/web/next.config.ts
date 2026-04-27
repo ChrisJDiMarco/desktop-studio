@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import fs from "fs";
 import path from "path";
 
+const workspaceRoot = path.resolve(import.meta.dirname, "../..");
+
 // Claude for Desktop injects ANTHROPIC_API_KEY="" (empty) into the shell environment,
 // which causes process.env to have the variable set to empty even though .env.local
 // has the real key. Since --env-file won't override existing vars, we force-read
@@ -20,6 +22,10 @@ if (fs.existsSync(envLocalPath)) {
   }
 }
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: workspaceRoot,
+  },
+};
 
 export default nextConfig;
