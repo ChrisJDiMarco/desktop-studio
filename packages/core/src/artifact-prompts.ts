@@ -320,8 +320,8 @@ The active design system is specified above. You MUST apply it:
   const __researchSection = "";
   const __imgMapSection = "";
 
-  return `${__sysCtx}You are a principal engineer and designer at a world-class product studio — the kind that ships Stripe, Linear, Vercel, or Arc. Your HTML output is indistinguishable from what a 6-person elite team would deliver after a month of polish. The user wants: "${__userIntent.substring(0, 1000)}"
-${__researchSection}${__imgMapSection}${__dsBlock}${typeGuide}
+  return `${__sysCtx}You are a principal engineer and designer at a world-class product studio — the kind that ships Stripe, Linear, Vercel, or Arc. Your HTML output is indistinguishable from what a 6-person elite team would deliver after a month of polish. The user wants: "${__userIntent.substring(0, 1000)}"\n` +
+`${__researchSection}${__imgMapSection}${__dsBlock}${typeGuide}
 
 STRUCTURE & LAYOUT (non-negotiable):
 - Generate a COMPLETE self-contained HTML document (<!DOCTYPE html>…</html>)
@@ -368,3 +368,67 @@ Target viewport dimensions: ${dims.w}×${dims.h}px.
 
 Output ONLY the complete HTML document. Start with <!DOCTYPE html> and end with </html>. No markdown fences, no JSON wrapper, no preamble, no commentary before or after. Just the raw HTML.`;
 }
+
+// =====================================================================
+// Refine prompt (CRISPR-style edits to an existing artifact)
+// =====================================================================
+
+export type BuildHtmlArtifactRefinePromptOptions = {
+  systemContext?: string;
+  /**
+   * Optional list of prior edit instructions, oldest first. Web's CRISPR mode
+   * tracks `desktopCrisprInputs[artifactId]`; on a multi-pass refine we want
+   * the model to know what the user already asked for so it doesn't undo
+   * earlier changes.
+   */
+  priorInstructions?: string[];
+};
+
+export function buildHtmlArtifactRefinePrompt(
+  currentHtml: string,
+  instruction: string,
+  opts: BuildHtmlArtifactRefinePromptOptions = {}
+): string {
+  const __sysCtx = opts.systemContext ?? "";
+  const __prior =
+    opts.priorInstructions && opts.priorInstructions.length > 0
+      ? `\n\nPRIOR EDITS APPLIED (already in the current artifact below — do not undo them):\n${opts.priorInstructions
+          .map((p, i) => `${i + 1}. ${p}`)
+          .join("\n")}`
+      : "";
+
+  return `${__sysCtx}You are refining an existing HTML artifact. Apply the user's edit instruction below while preserving everything that wasn't asked to change. Maintain the same overall design language, content density, and quality bar — do not regress sections that the user didn't ask to modify.${__prior}
+
+OUTPUT RULES:
+- Output ONLY the COMPLETE updated HTML document — start with <!DOCTYPE html> and end with </html>.
+- Keep the same external dependencies (Tailwind CDN, Google Fonts, Lucide) unless the instruction explicitly asks to swap them.
+- 🚫 No markdown code fences. No "Here's the updated…" preamble. No commentary after.
+
+CURRENT ARTIFACT:
+${currentHtml}
+
+EDIT INSTRUCTION:
+${instruction}`;
+}
+
+// =====================================================================
+// Auto-improve prompt (one polish pass)
+// =====================================================================
+
+/**
+ * Web's "Auto-Improve" loops over /api/generate N times with a generic
+ * "make this look like a premium, shipped product" instruction. Single-pass
+ * version of that prompt — pair with the refine call site to run iteratively
+ * (web defaults to 3 passes; web's exact wording is at desktop-mode.jsx:10481).
+ */
+export function buildHtmlArtifactAutoImprovePrompt(
+  currentHtml: string,
+  opts: BuildHtmlArtifactRefinePromptOptions = {}
+): string {
+  return buildHtmlArtifactRefinePrompt(
+    currentHtml,
+    "Make this look like a premium, shipped product. Improve the visual design, layout, interaction states, motion, and content realism (real names, real numbers, plausible dates). Push every section closer to a 6-person elite team's month-of-polish output. Keep the structure, only level it up.",
+    opts
+  );
+}
+

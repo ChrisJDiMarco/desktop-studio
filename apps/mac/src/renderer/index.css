@@ -727,6 +727,55 @@ body.artifact-mode {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.artifact-content-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.artifact-content-wrap.is-refining {
+  /* Subtle dim while a refine pass is in flight so the user can tell the
+   * iframe content is "stale" and a new version is on the way. */
+  opacity: 0.45;
+  filter: saturate(0.6);
+  transition: opacity 200ms ease;
+}
+
+.artifact-refine-overlay {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(15, 17, 23, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.artifact-refine-overlay-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #22d3ee;
+  box-shadow: 0 0 12px #22d3ee;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
 .artifact-iframe {
   flex: 1;
   width: 100%;
@@ -734,6 +783,110 @@ body.artifact-mode {
   border: 0;
   background: white;
   -webkit-app-region: no-drag;
+}
+
+/* ============== ARTIFACT REFINE BAR ============== */
+
+.artifact-refine-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-app-region: no-drag;
+}
+
+.artifact-refine-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: white;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.artifact-refine-input:focus {
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.artifact-refine-input::placeholder {
+  color: rgba(255, 255, 255, 0.36);
+}
+
+.artifact-refine-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.artifact-refine-button {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 9999px;
+  background: rgba(34, 211, 238, 0.18);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.artifact-refine-button:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.28);
+  color: #a5f3fc;
+}
+
+.artifact-refine-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============== ARTIFACT TITLEBAR ACTION BUTTON ============== */
+
+.artifact-titlebar-btn {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: rgba(34, 211, 238, 0.14);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+  margin-left: auto;
+}
+
+.artifact-titlebar-btn:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.24);
+  color: #a5f3fc;
+}
+
+.artifact-titlebar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.artifact-titlebar-btn svg {
+  color: currentColor;
 }
 
 .artifact-text {
