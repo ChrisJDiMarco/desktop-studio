@@ -16,6 +16,11 @@ export type GenerateResponse = {
   search_results?: unknown;
 };
 
+export type Config = {
+  backendUrl: string;
+  model: string;
+};
+
 const api = {
   // Pill window controls
   hidePill: () => ipcRenderer.send("pill:hide"),
@@ -27,6 +32,11 @@ const api = {
   // Backend (Next.js / app.thinklet.io)
   generate: (req: GenerateRequest) =>
     ipcRenderer.invoke("backend:generate", req) as Promise<GenerateResponse>,
+
+  // Config
+  getConfig: () => ipcRenderer.invoke("config:get") as Promise<Config>,
+  setConfig: (patch: Partial<Config>) =>
+    ipcRenderer.invoke("config:set", patch) as Promise<Config>,
   getBackendUrl: () =>
     ipcRenderer.invoke("config:get-backend-url") as Promise<string>,
   setBackendUrl: (url: string) =>

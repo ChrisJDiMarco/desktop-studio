@@ -8,10 +8,17 @@ export type Config = {
    * dev server. Will eventually point at app.thinklet.io for production.
    */
   backendUrl: string;
+  /**
+   * Default model for generation. Anthropic-style names route to Claude;
+   * `gpt-*` to OpenAI; `deepseek-*` to DeepSeek; `sonar*` to Perplexity.
+   * Mirrored against /api/generate's branching in apps/web.
+   */
+  model: string;
 };
 
 const DEFAULTS: Config = {
   backendUrl: "http://localhost:3000",
+  model: "claude-sonnet-4-6",
 };
 
 let cache: Config | null = null;
@@ -37,10 +44,32 @@ function save(next: Config) {
   fs.writeFileSync(configPath(), JSON.stringify(next, null, 2));
 }
 
+export function getConfig(): Config {
+  return { ...load() };
+}
+
+export function setConfig(patch: Partial<Config>): Config {
+  const next = { ...load(), ...patch };
+  // Light validation — drop empty strings that would break URLs.
+  if (typeof next.backendUrl === "string") {
+    next.backendUrl = next.backendUrl.trim().replace(/\/$/, "");
+    if (!next.backendUrl) next.backendUrl = DEFAULTS.backendUrl;
+  }
+  if (typeof next.model === "string" && !next.model.trim()) {
+    next.model = DEFAULTS.model;
+  }
+  save(next);
+  return { ...next };
+}
+
 export function getBackendUrl(): string {
   return load().backendUrl.replace(/\/$/, "");
 }
 
 export function setBackendUrl(url: string): void {
-  save({ ...load(), backendUrl: url });
+  setConfig({ backendUrl: url });
+}
+
+export function getModel(): string {
+  return load().model;
 }

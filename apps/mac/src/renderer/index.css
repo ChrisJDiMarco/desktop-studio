@@ -713,3 +713,148 @@ body.artifact-mode {
   border-radius: 3px;
   color: rgba(255, 255, 255, 0.85);
 }
+
+/* When the body hosts a rendered artifact (iframe), drop the inner padding
+ * so the iframe spans edge-to-edge. Status row sits on top of it. */
+.artifact-body-flush {
+  padding: 0;
+  gap: 0;
+}
+
+.artifact-body-flush .artifact-status {
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.artifact-iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+  -webkit-app-region: no-drag;
+}
+
+.artifact-text {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.artifact-code {
+  max-height: 480px;
+  overflow: auto;
+}
+
+.artifact-notice {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.55);
+  border-left: 2px solid rgba(34, 211, 238, 0.45);
+  padding: 4px 0 4px 12px;
+  margin-bottom: 8px;
+}
+
+/* ============== SETTINGS DRAWER ============== */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 12px 12px;
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.settings-input,
+.settings-select {
+  -webkit-app-region: no-drag;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.settings-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 4l3 3 3-3' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.settings-select option {
+  background: #111827;
+  color: white;
+}
+
+.settings-input:focus,
+.settings-select:focus {
+  border-color: rgba(34, 211, 238, 0.6);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.settings-hint code {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.settings-save {
+  -webkit-app-region: no-drag;
+  height: 30px;
+  padding: 0 16px;
+  border: none;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.settings-error {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fca5a5;
+}

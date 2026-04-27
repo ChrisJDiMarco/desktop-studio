@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { colors } from "@desktop-studio/design";
 
-type View = "menu" | "tools" | "connect" | "auto" | "jobs";
+type View = "menu" | "tools" | "connect" | "auto" | "jobs" | "settings";
 
 type MenuItem = { id: Exclude<View, "menu">; label: string };
 
@@ -10,6 +10,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: "connect", label: "Connections" },
   { id: "auto", label: "Automations" },
   { id: "jobs", label: "Jobs" },
+  { id: "settings", label: "Settings" },
 ];
 
 export default function PillApp() {
@@ -18,7 +19,6 @@ export default function PillApp() {
   const [view, setView] = useState<View>("menu");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the input on mount and whenever main asks us to.
   useEffect(() => {
     inputRef.current?.focus();
     return window.desktopStudio.onFocusInput(() => {
@@ -26,7 +26,6 @@ export default function PillApp() {
     });
   }, []);
 
-  // Tell main to grow / shrink the window in response to the popup state.
   useEffect(() => {
     window.desktopStudio.setExpanded(open);
   }, [open]);
@@ -67,8 +66,13 @@ export default function PillApp() {
           className="popup"
           role="menu"
           onMouseDown={(e) => {
-            // Don't drag the window when interacting with popup chrome.
-            if (e.target instanceof HTMLElement && e.target.tagName !== "BUTTON") {
+            if (
+              e.target instanceof HTMLElement &&
+              e.target.tagName !== "BUTTON" &&
+              e.target.tagName !== "INPUT" &&
+              e.target.tagName !== "SELECT" &&
+              e.target.tagName !== "OPTION"
+            ) {
               e.preventDefault();
             }
           }}
@@ -174,6 +178,7 @@ function Drawer({
     connect: "Connections",
     auto: "Automations",
     jobs: "Jobs",
+    settings: "Settings",
   };
 
   return (
@@ -202,6 +207,7 @@ function Drawer({
         {view === "connect" && <ConnectDrawer />}
         {view === "auto" && <AutoDrawer />}
         {view === "jobs" && <JobsDrawer />}
+        {view === "settings" && <SettingsDrawer />}
       </div>
     </div>
   );
@@ -285,6 +291,122 @@ function JobsDrawer() {
         </li>
       ))}
     </ul>
+  );
+}
+
+const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+  { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  { value: "gpt-4o", label: "GPT-4o (OpenAI)" },
+  { value: "deepseek-chat", label: "DeepSeek Chat" },
+  { value: "sonar-pro", label: "Sonar Pro (Perplexity)" },
+];
+
+function SettingsDrawer() {
+  const [backendUrl, setBackendUrl] = useState("");
+  const [model, setModel] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle"
+  );
+  const [errorText, setErrorText] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    window.desktopStudio.getConfig().then((cfg) => {
+      if (cancelled) return;
+      setBackendUrl(cfg.backendUrl);
+      setModel(cfg.model);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function save() {
+    setStatus("saving");
+    setErrorText("");
+    try {
+      const next = await window.desktopStudio.setConfig({ backendUrl, model });
+      setBackendUrl(next.backendUrl);
+      setModel(next.model);
+      setStatus("saved");
+      setTimeout(() => setStatus("idle"), 1400);
+    } catch (e: unknown) {
+      setErrorText(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="settings">
+      <div className="settings-row">
+        <label className="settings-label" htmlFor="backend-url">
+          Backend URL
+        </label>
+        <input
+          id="backend-url"
+          type="text"
+          className="settings-input"
+          value={backendUrl}
+          onChange={(e) => setBackendUrl(e.target.value)}
+          placeholder="http://localhost:3000"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+        />
+        <p className="settings-hint">
+          Where the Mac app sends generation requests. Defaults to your local
+          Next.js dev server. Will eventually point to{" "}
+          <code>https://app.thinklet.io</code>.
+        </p>
+      </div>
+
+      <div className="settings-row">
+        <label className="settings-label" htmlFor="default-model">
+          Default model
+        </label>
+        <select
+          id="default-model"
+          className="settings-select"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+        >
+          {MODEL_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+          {!MODEL_OPTIONS.some((o) => o.value === model) && model && (
+            <option value={model}>{model} (custom)</option>
+          )}
+        </select>
+        <p className="settings-hint">
+          Used for new artifact windows. /api/generate routes by name prefix
+          (claude-*, gpt-*, deepseek-*, sonar*).
+        </p>
+      </div>
+
+      <div className="settings-actions">
+        <button
+          type="button"
+          className="chip chip-on settings-save"
+          onClick={save}
+          disabled={status === "saving"}
+        >
+          {status === "saving"
+            ? "Saving…"
+            : status === "saved"
+              ? "Saved ✓"
+              : "Save"}
+        </button>
+        {status === "error" && (
+          <span className="settings-error" title={errorText}>
+            Error
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -5,7 +5,13 @@ import path from "node:path";
 import started from "electron-squirrel-startup";
 
 import { generate, type GenerateRequest } from "./backend";
-import { getBackendUrl, setBackendUrl } from "./config";
+import {
+  getBackendUrl,
+  setBackendUrl,
+  getConfig,
+  setConfig,
+  type Config,
+} from "./config";
 
 // Forge's Vite plugin injects these at build time.
 declare const PILL_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -182,6 +188,13 @@ ipcMain.handle("config:get-backend-url", () => getBackendUrl());
 ipcMain.handle("config:set-backend-url", (_event, url: string) => {
   if (typeof url !== "string" || !url.trim()) return;
   setBackendUrl(url.trim());
+});
+
+ipcMain.handle("config:get", () => getConfig());
+
+ipcMain.handle("config:set", (_event, patch: Partial<Config>) => {
+  if (!patch || typeof patch !== "object") return getConfig();
+  return setConfig(patch);
 });
 
 ipcMain.handle("shell:open-external", (_event, url: string) => {
