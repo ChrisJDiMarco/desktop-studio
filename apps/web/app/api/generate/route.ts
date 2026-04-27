@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import fs from "fs";
 import path from "path";
-import { DEFAULT_AI_MODEL } from "@/lib/ai-models";
+import { DEFAULT_AI_MODEL } from "@desktop-studio/core";
 
 // Load DESIGN.md tokens once at module init — injected as system prompt on every AI call.
 // The YAML front matter is extracted so agents get exact token values (colors, type, spacing)

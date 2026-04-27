@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",
+    "@desktop-studio/core": "workspace:*",
     "@desktop-studio/design": "workspace:*",
     "@composio/core": "^0.6.11",
     "@tanstack/react-query": "^5.96.2",

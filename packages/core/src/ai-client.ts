@@ -10,7 +10,7 @@
  * per-request timeout.
  */
 
-import { DEFAULT_AI_MODEL } from "@/lib/ai-models";
+import { DEFAULT_AI_MODEL } from "./ai-models";
 
 const CONTENT_STORAGE_KEY = "desktop-studio-content";
 
