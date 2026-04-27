@@ -1,0 +1,12 @@
+{
+  "name": "@desktop-studio/design",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Design tokens, Tailwind preset, and global CSS — single source of truth for both apps",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens.ts"
+  }
+}

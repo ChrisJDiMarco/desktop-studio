@@ -1,0 +1,10 @@
+{
+  "name": "@desktop-studio/mac",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Desktop Studio macOS Electron app — placeholder; scaffolded in Phase 1",
+  "scripts": {
+    "start": "echo 'apps/mac is a placeholder. Implement Phase 1 from MAC_APP_HANDOVER.md (Electron Forge + Vite + TS scaffold).' && exit 1",
+    "make": "echo 'apps/mac is a placeholder.' && exit 1"
+  }
+}
