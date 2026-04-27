@@ -786,6 +786,12 @@ const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "sonar-pro", label: "Sonar Pro (Perplexity)" },
 ];
 
+type PingState =
+  | { kind: "idle" }
+  | { kind: "pinging" }
+  | { kind: "ok"; latencyMs: number; status: number }
+  | { kind: "fail"; error: string };
+
 function SettingsDrawer({
   config,
   patchConfig,
@@ -799,6 +805,7 @@ function SettingsDrawer({
     "idle"
   );
   const [errorText, setErrorText] = useState("");
+  const [ping, setPing] = useState<PingState>({ kind: "idle" });
 
   useEffect(() => {
     if (config) {
@@ -806,6 +813,34 @@ function SettingsDrawer({
       setModel(config.model);
     }
   }, [config]);
+
+  async function probeBackend(url: string) {
+    if (!url.trim()) return;
+    setPing({ kind: "pinging" });
+    try {
+      const r = await window.desktopStudio.pingBackend(url);
+      if (r.ok) {
+        setPing({
+          kind: "ok",
+          latencyMs: r.latencyMs ?? 0,
+          status: r.status ?? 0,
+        });
+      } else {
+        setPing({ kind: "fail", error: r.error ?? "Unreachable" });
+      }
+    } catch (e: unknown) {
+      setPing({
+        kind: "fail",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  // Probe on mount + whenever the saved URL changes (after Save).
+  useEffect(() => {
+    if (config?.backendUrl) probeBackend(config.backendUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.backendUrl]);
 
   async function save() {
     setStatus("saving");
@@ -816,14 +851,51 @@ function SettingsDrawer({
       setModel(next.model);
       setStatus("saved");
       setTimeout(() => setStatus("idle"), 1400);
+      // probeBackend gets called by the effect above when config updates.
     } catch (e: unknown) {
       setErrorText(e instanceof Error ? e.message : String(e));
       setStatus("error");
     }
   }
 
+  const pingClassName =
+    ping.kind === "ok"
+      ? "backend-status backend-status-ok"
+      : ping.kind === "fail"
+        ? "backend-status backend-status-fail"
+        : "backend-status backend-status-pinging";
+
+  const pingLabel =
+    ping.kind === "pinging"
+      ? "Checking…"
+      : ping.kind === "ok"
+        ? `Connected · ${ping.latencyMs}ms`
+        : ping.kind === "fail"
+          ? "Unreachable"
+          : "—";
+
   return (
     <div className="settings">
+      <div className={pingClassName}>
+        <span className="backend-status-dot" />
+        <span className="backend-status-label">{pingLabel}</span>
+        {ping.kind === "fail" && (
+          <button
+            type="button"
+            className="backend-status-retry"
+            onClick={() => probeBackend(config?.backendUrl ?? backendUrl)}
+            title="Re-check"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+      {ping.kind === "fail" && (
+        <p className="backend-status-detail" title={ping.error}>
+          {ping.error}
+        </p>
+      )}
+
       <div className="settings-row">
         <label className="settings-label" htmlFor="backend-url">
           Backend URL

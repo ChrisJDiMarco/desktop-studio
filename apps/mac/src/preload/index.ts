@@ -73,6 +73,16 @@ const api = {
   pushPromptHistory: (prompt: string) =>
     ipcRenderer.invoke("config:push-prompt-history", prompt) as Promise<Config>,
 
+  // Backend reachability — used by Settings drawer for live status.
+  pingBackend: (overrideUrl?: string) =>
+    ipcRenderer.invoke("backend:ping", overrideUrl) as Promise<{
+      ok: boolean;
+      url: string;
+      status?: number;
+      latencyMs?: number;
+      error?: string;
+    }>,
+
   // Shell helpers
   openExternal: (url: string) =>
     ipcRenderer.invoke("shell:open-external", url) as Promise<void>,

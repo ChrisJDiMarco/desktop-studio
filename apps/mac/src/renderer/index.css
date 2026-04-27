@@ -1055,6 +1055,93 @@ body.artifact-mode {
   color: #fca5a5;
 }
 
+/* ============== BACKEND STATUS ============== */
+
+.backend-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.backend-status-pinging {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.backend-status-pinging .backend-status-dot {
+  background: rgba(255, 255, 255, 0.5);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.backend-status-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+}
+
+.backend-status-ok .backend-status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 10px #22c55e;
+}
+
+.backend-status-fail {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.backend-status-fail .backend-status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.backend-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.backend-status-label {
+  flex: 1;
+}
+
+.backend-status-retry {
+  -webkit-app-region: no-drag;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.backend-status-retry:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.backend-status-detail {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  margin-top: -4px;
+  padding: 0 4px;
+  word-break: break-word;
+}
+
 .settings-textarea {
   -webkit-app-region: no-drag;
   width: 100%;

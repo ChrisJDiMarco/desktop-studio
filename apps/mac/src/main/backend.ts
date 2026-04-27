@@ -173,6 +173,49 @@ export async function generateImage(
   };
 }
 
+export type PingResult = {
+  ok: boolean;
+  url: string;
+  status?: number;
+  latencyMs?: number;
+  error?: string;
+};
+
+/**
+ * Lightweight reachability probe. Hits the backend's root URL with GET — if
+ * anything answers (any HTTP code), we consider it alive. Used by the
+ * Settings drawer to show a live "Connected · 42ms" / "Unreachable" status
+ * so port mismatches show up before the user submits a prompt.
+ */
+export async function pingBackend(
+  overrideUrl?: string
+): Promise<PingResult> {
+  const base = (overrideUrl ?? getBackendUrl()).replace(/\/$/, "");
+  const start = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const res = await fetch(base, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    return {
+      ok: true,
+      url: base,
+      status: res.status,
+      latencyMs: Date.now() - start,
+    };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      url: base,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function generateVideo(
   req: GenerateVideoRequest,
   signal?: AbortSignal

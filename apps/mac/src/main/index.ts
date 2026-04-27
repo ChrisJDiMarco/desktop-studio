@@ -8,6 +8,7 @@ import {
   generate,
   generateImage,
   generateVideo,
+  pingBackend,
   type GenerateRequest,
   type GenerateImageRequest,
   type GenerateVideoRequest,
@@ -227,6 +228,10 @@ ipcMain.handle(
     return generateVideo(req);
   }
 );
+
+ipcMain.handle("backend:ping", async (_event, overrideUrl?: string) => {
+  return pingBackend(overrideUrl);
+});
 
 ipcMain.handle("config:get-backend-url", () => getBackendUrl());
 
