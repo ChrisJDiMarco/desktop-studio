@@ -12,6 +12,12 @@ type Props = {
   content: string;
   fallbackTitle?: string;
   fallbackDims?: { w: number; h: number };
+  /**
+   * When true, the visual-editor script (click-to-select element overlays
+   * with hover boxes + DOM labels) gets injected into the artifact HTML.
+   * Off by default so artifacts read as finished pages, not editable drafts.
+   */
+  editMode?: boolean;
 };
 
 /**
@@ -24,6 +30,7 @@ export function ArtifactRenderer({
   content,
   fallbackTitle = "Untitled",
   fallbackDims = { w: 560, h: 440 },
+  editMode = false,
 }: Props) {
   const parsed = parseGeneratedHtmlArtifact(content, {
     fallbackTitle,
@@ -34,7 +41,9 @@ export function ArtifactRenderer({
   if (parsed && parsed.success && typeof parsed.content === "string") {
     let html: string = parsed.content;
     html = addIframeNavGuard(html);
-    html = injectVisualEditor(html);
+    if (editMode) {
+      html = injectVisualEditor(html);
+    }
     return <HtmlFrame html={html} />;
   }
 

@@ -308,6 +308,7 @@ export default function ArtifactApp() {
                   content={htmlResponse}
                   fallbackTitle={prompt.slice(0, 30) || "Untitled"}
                   fallbackDims={htmlTypeInfo.dims}
+                  editMode={editMode}
                 />
               )}
               {phase === "refining" && (
