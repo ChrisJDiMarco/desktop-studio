@@ -902,8 +902,25 @@ body.artifact-mode {
   cursor: not-allowed;
 }
 
+.artifact-titlebar-btn.is-active {
+  background: rgba(34, 211, 238, 0.28);
+  border-color: rgba(34, 211, 238, 0.6);
+  color: #a5f3fc;
+}
+
 .artifact-titlebar-btn svg {
   color: currentColor;
+}
+
+.artifact-titlebar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.artifact-titlebar-actions .artifact-titlebar-btn {
+  margin-left: 0;
 }
 
 /* ============== IMAGE ARTIFACT ============== */

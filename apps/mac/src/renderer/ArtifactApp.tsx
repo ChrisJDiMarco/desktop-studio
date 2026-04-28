@@ -30,6 +30,8 @@ export default function ArtifactApp() {
   const [elapsed, setElapsed] = useState(0);
   const [refineInput, setRefineInput] = useState("");
   const [priorInstructions, setPriorInstructions] = useState<string[]>([]);
+  const [editMode, setEditMode] = useState(false);
+  const refineInputRef = useRef<HTMLInputElement>(null);
 
   // HTML branch state
   const [htmlResponse, setHtmlResponse] = useState("");
@@ -67,6 +69,15 @@ export default function ArtifactApp() {
     }, 100);
     return () => clearInterval(interval);
   }, [isWorking]);
+
+  // Auto-focus the refine input the moment Edit mode is turned on so the
+  // user can start typing immediately. Without this they'd have to click
+  // into the field after toggling.
+  useEffect(() => {
+    if (editMode) {
+      requestAnimationFrame(() => refineInputRef.current?.focus());
+    }
+  }, [editMode]);
 
   // Initial generation on mount.
   useEffect(() => {
@@ -227,29 +238,51 @@ export default function ArtifactApp() {
         <span className="artifact-eyebrow">{eyebrow}</span>
         <span className="artifact-title">{prompt || "Untitled"}</span>
         {(phase === "ready" || phase === "refining") && hasContent && (
-          <button
-            type="button"
-            className="artifact-titlebar-btn"
-            onClick={runAutoImprove}
-            disabled={isWorking}
-            title={
-              kind === "image"
-                ? "Re-render with sharper detail + better composition"
-                : "Re-run with a 'make this look like a premium, shipped product' polish pass"
-            }
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-              <path
-                d="M6 1.5L7.2 4.4L10 5l-2.4 2L8.4 10 6 8.4 3.6 10 4.4 7 2 5l2.8-.6L6 1.5z"
-                stroke="currentColor"
-                strokeWidth="1"
-                strokeLinejoin="round"
-                fill="currentColor"
-                fillOpacity="0.25"
-              />
-            </svg>
-            <span>Auto-Improve</span>
-          </button>
+          <div className="artifact-titlebar-actions">
+            <button
+              type="button"
+              className={"artifact-titlebar-btn" + (editMode ? " is-active" : "")}
+              onClick={() => setEditMode((v) => !v)}
+              disabled={isWorking}
+              title={
+                editMode
+                  ? "Hide the refine input"
+                  : kind === "image"
+                    ? "Open the refine input to adjust this image"
+                    : "Open the refine input to adjust this artifact"
+              }
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              <span>{editMode ? "Done" : "Edit"}</span>
+            </button>
+
+            <button
+              type="button"
+              className="artifact-titlebar-btn"
+              onClick={runAutoImprove}
+              disabled={isWorking}
+              title={
+                kind === "image"
+                  ? "Re-render with sharper detail + better composition"
+                  : "Re-run with a 'make this look like a premium, shipped product' polish pass"
+              }
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path
+                  d="M6 1.5L7.2 4.4L10 5l-2.4 2L8.4 10 6 8.4 3.6 10 4.4 7 2 5l2.8-.6L6 1.5z"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinejoin="round"
+                  fill="currentColor"
+                  fillOpacity="0.25"
+                />
+              </svg>
+              <span>Auto-Improve</span>
+            </button>
+          </div>
         )}
       </header>
 
@@ -285,32 +318,41 @@ export default function ArtifactApp() {
               )}
             </div>
 
-            <form className="artifact-refine-bar" onSubmit={handleRefineSubmit}>
-              <input
-                type="text"
-                className="artifact-refine-input"
-                placeholder={
-                  phase === "refining"
-                    ? kind === "image"
-                      ? "Re-rendering… please wait"
-                      : "Refining… please wait"
-                    : kind === "image"
-                      ? "Refine this image… (e.g. \"warmer tones\", \"add a foreground element\")"
-                      : "Refine this artifact… (e.g. \"make the buttons cyan\")"
-                }
-                value={refineInput}
-                onChange={(e) => setRefineInput(e.target.value)}
-                disabled={isWorking}
-                spellCheck={false}
-              />
-              <button
-                type="submit"
-                className="artifact-refine-button"
-                disabled={isWorking || !refineInput.trim()}
-              >
-                {phase === "refining" ? "…" : "Refine"}
-              </button>
-            </form>
+            {editMode && (
+              <form className="artifact-refine-bar" onSubmit={handleRefineSubmit}>
+                <input
+                  ref={refineInputRef}
+                  type="text"
+                  className="artifact-refine-input"
+                  placeholder={
+                    phase === "refining"
+                      ? kind === "image"
+                        ? "Re-rendering… please wait"
+                        : "Refining… please wait"
+                      : kind === "image"
+                        ? "Describe a change… (e.g. \"warmer tones\", \"add a foreground element\")"
+                        : "Describe a change… (e.g. \"make the buttons cyan\", \"add a testimonials section\")"
+                  }
+                  value={refineInput}
+                  onChange={(e) => setRefineInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditMode(false);
+                    }
+                  }}
+                  disabled={isWorking}
+                  spellCheck={false}
+                />
+                <button
+                  type="submit"
+                  className="artifact-refine-button"
+                  disabled={isWorking || !refineInput.trim()}
+                >
+                  {phase === "refining" ? "…" : "Refine"}
+                </button>
+              </form>
+            )}
           </>
         )}
 
