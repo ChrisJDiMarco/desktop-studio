@@ -101,6 +101,30 @@ import {
   CircuitBoardIcon
 } from 'lucide-react';
 
+const ARTIFACT_SAVE_TIMEOUT_MS = 15000;
+const ARTIFACT_GENERATION_TIMEOUT_MS = 300000;
+
+const resolveWithTimeout = (promise, timeoutMs, timeoutValue) => {
+  let timeoutId;
+  const timeout = new Promise(resolve => {
+    timeoutId = setTimeout(() => resolve(timeoutValue), timeoutMs);
+  });
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timeoutId)),
+    timeout,
+  ]);
+};
+
+const rejectWithTimeout = (promise, timeoutMs, message) => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([
+    Promise.resolve(promise).finally(() => clearTimeout(timeoutId)),
+    timeout,
+  ]);
+};
 
 const calcBentoPosition = (index, viewW, viewH, itemW = 420, itemH = 320) => {
   const gap = 20;
@@ -6036,34 +6060,6 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
     ));
   }, [artifactHasDurablePayload, artifactPayloadChanged]);
 
-  const keepPendingUntilSaved = useCallback((visiblePrev, next) => {
-    const visibleById = new Map((visiblePrev || []).map(a => [a.id, a]));
-    return (next || []).map(artifact => {
-      const before = visibleById.get(artifact.id);
-      const needsDurableCommit =
-        artifact &&
-        artifact.isLoading === false &&
-        artifactHasDurablePayload(artifact) &&
-        artifactPayloadChanged(before, artifact);
-      if (!needsDurableCommit) return artifact;
-      return {
-        ...(before || artifact),
-        title: artifact.title || before?.title,
-        type: artifact.type || before?.type,
-        x: artifact.x,
-        y: artifact.y,
-        width: artifact.width,
-        height: artifact.height,
-        zIndex: artifact.zIndex,
-        isMinimized: artifact.isMinimized,
-        isMaximized: artifact.isMaximized,
-        isLoading: true,
-        content: before?.content || '',
-        mediaUrl: before?.mediaUrl || null,
-      };
-    });
-  }, [artifactHasDurablePayload, artifactPayloadChanged]);
-
   const saveDesktopArtifactsToStorage = useCallback(async (artifacts, saveSeq) => {
     // CRITICAL: never persist before hydration completes — otherwise the
     // initial empty React state can clobber the rich localStorage stubs
@@ -6082,7 +6078,7 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
       // Same pre-hydration guard as saveDesktopArtifactsToStorage — defence
       // in depth so neither entry point can wipe localStorage on first paint.
       if (!artifactsHydratedRef.current) return;
-      saveDesktopArtifactsToStorage(artifacts, saveSeq).catch(() => {
+      const saveLocalStorageSafeCopy = () => {
         if (!isMountedRef.current || saveSeq !== desktopArtifactSaveSeqRef.current) return;
         const localStorageSafe = (artifacts || []).map(a => ({
           ...a,
@@ -6094,6 +6090,15 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
           mediaUrl: typeof a.mediaUrl === 'string' && a.mediaUrl.startsWith('data:') ? null : a.mediaUrl,
         }));
         updateContentRef.current(TQL.set('desktopArtifacts', localStorageSafe));
+      };
+      resolveWithTimeout(
+        saveDesktopArtifactsToStorage(artifacts, saveSeq),
+        ARTIFACT_SAVE_TIMEOUT_MS,
+        false
+      ).then(saved => {
+        if (!saved) saveLocalStorageSafeCopy();
+      }).catch(() => {
+        saveLocalStorageSafeCopy();
       }).catch(() => {
         // localStorage can still fail if the browser is out of space.
       });
@@ -6323,39 +6328,27 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
       if (!artifactsHydratedRef.current) return next;
       if (shouldSaveBeforeRender(sourcePrev, next) || shouldSaveBeforeRender(visiblePrev, next)) {
         const saveSeq = ++desktopArtifactSaveSeqRef.current;
-        saveDesktopArtifactsToStorage(next, saveSeq).then(saved => {
-          if (!saved || !isMountedRef.current || saveSeq !== desktopArtifactSaveSeqRef.current) return;
-          setDesktopArtifacts(current => {
-            const committed = next.map(artifact => {
-              const currentArtifact = current.find(a => a.id === artifact.id);
-              if (!currentArtifact) return artifact;
-              return {
-                ...artifact,
-                x: currentArtifact.x ?? artifact.x,
-                y: currentArtifact.y ?? artifact.y,
-                zIndex: currentArtifact.zIndex ?? artifact.zIndex,
-                isMinimized: currentArtifact.isMinimized ?? artifact.isMinimized,
-                isMaximized: currentArtifact.isMaximized ?? artifact.isMaximized,
-              };
-            });
-            desktopArtifactsRef.current = committed;
-            return committed;
-          });
+        // Render finished artifacts immediately. Large HTML/media still writes
+        // to IndexedDB in the background; if that stalls, fall back to the slim
+        // localStorage-safe save path rather than leaving a permanent spinner.
+        resolveWithTimeout(
+          saveDesktopArtifactsToStorage(next, saveSeq),
+          ARTIFACT_SAVE_TIMEOUT_MS,
+          false
+        ).then(saved => {
+          if (!isMountedRef.current || saveSeq !== desktopArtifactSaveSeqRef.current) return;
+          if (!saved) saveDesktopArtifactsNow(next);
         }).catch(() => {
           if (!isMountedRef.current || saveSeq !== desktopArtifactSaveSeqRef.current) return;
-          setDesktopArtifacts(() => {
-            desktopArtifactsRef.current = next;
-            return next;
-          });
           saveDesktopArtifactsNow(next);
         });
-        return keepPendingUntilSaved(visiblePrev, next);
+        return next;
       } else {
         debouncedSaveDesktopArtifacts(next);
         return next;
       }
     });
-  }, [debouncedSaveDesktopArtifacts, keepPendingUntilSaved, saveDesktopArtifactsNow, saveDesktopArtifactsToStorage, shouldSaveBeforeRender]);
+  }, [debouncedSaveDesktopArtifacts, saveDesktopArtifactsNow, saveDesktopArtifactsToStorage, shouldSaveBeforeRender]);
 
   // ─── Generation Job Center ──────────────────────────────────────────────
   const persistGenerationJobs = useCallback((updater) => {
@@ -11511,7 +11504,7 @@ Return this exact shape:
           return { dims: { w: 560, h: 440 }, kind: 'App / Tool / Widget' };
         })();
 
-        const appResult = await aiApi.generate({
+        const appResult = await rejectWithTimeout(aiApi.generate({
     max_tokens: 64000,
     // Vision context: forward attached images so the model can match a
     // pasted screenshot / mockup. Server-side the route only emits image
@@ -12076,9 +12069,16 @@ Target viewport dimensions: ${dims.w}×${dims.h}px.
 
 Output ONLY the complete HTML document. Start with <!DOCTYPE html> and end with </html>. No markdown fences, no JSON wrapper, no preamble, no commentary before or after. Just the raw HTML.`;
               })()
-
-        });
-        if (isGenerationJobCancelled(desktopJobId)) return;
+        }), ARTIFACT_GENERATION_TIMEOUT_MS, 'Artifact generation timed out after 5 minutes. Try a smaller scene, fewer generated assets, or regenerate this artifact.');
+        if (isGenerationJobCancelled(desktopJobId)) {
+          if (options?.refreshTargetId) {
+            persistDesktopArtifacts(prev => prev.map(a => a.id === options.refreshTargetId ? { ...a, isLoading: false } : a));
+          } else {
+            persistDesktopArtifacts(prev => prev.filter(a => a.id !== ph.id));
+            artifactOffset = Math.max(0, artifactOffset - 1);
+          }
+          return;
+        }
         updateGenerationJob(desktopJobId, { phase: isThinklet ? 'Rendering Thinklet' : 'Validating artifact HTML', progress: 76 });
         // Swap data-URL placeholders back to real base64 URLs in the LLM output so
         // the rendered artifact actually displays the generated images.
@@ -12106,6 +12106,7 @@ Output ONLY the complete HTML document. Start with <!DOCTYPE html> and end with 
             language: 'react',
             width: Math.min(appParsed.width || 560, viewW - 40),
             height: Math.min(appParsed.height || 420, viewH - 100),
+            lastGenerationError: null,
             isLoading: false,
           } : a));
           updateGenerationJob(desktopJobId, { phase: 'Thinklet rendered', progress: 92 });
@@ -12140,6 +12141,7 @@ Output ONLY the complete HTML document. Start with <!DOCTYPE html> and end with 
             content: finalContent,
             width: Math.min(parsedArtifact.width || 520, viewW - 40),
             height: Math.min(parsedArtifact.height || 380, viewH - 100),
+            lastGenerationError: null,
             isLoading: false
           } : a));
           updateGenerationJob(desktopJobId, { phase: 'Artifact rendered', progress: 92 });
@@ -12163,11 +12165,26 @@ Output ONLY the complete HTML document. Start with <!DOCTYPE html> and end with 
         }
       } catch (err) {
         if (options?.refreshTargetId) {
-          // On refresh failure, just mark the existing artifact as no longer loading
-          persistDesktopArtifacts(prev => prev.map(a => a.id === options.refreshTargetId ? { ...a, isLoading: false } : a));
+          persistDesktopArtifacts(prev => prev.map(a => a.id === options.refreshTargetId ? {
+            ...a,
+            isLoading: false,
+            lastGenerationError: err?.message || 'The refresh failed before the artifact could be rebuilt.',
+          } : a));
         } else {
-          persistDesktopArtifacts(prev => prev.filter(a => a.id !== ph.id));
-          artifactOffset--;
+          const failureTitle = (titleHint || ph?.title || 'Artifact').substring(0, 30);
+          const failureContent = buildHtmlArtifactErrorDocument(
+            failureTitle,
+            err?.message || 'The artifact could not be generated.',
+            ''
+          );
+          persistDesktopArtifacts(prev => prev.map(a => a.id === ph.id ? {
+            ...a,
+            title: failureTitle,
+            content: failureContent,
+            width: Math.min(ph.width || 560, viewW - 40),
+            height: Math.min(ph.height || 420, viewH - 100),
+            isLoading: false,
+          } : a));
         }
         addDebugLog('error', `[Desktop App Gen] Failed`, { error: err?.message });
         failGenerationJob(desktopJobId, err);
