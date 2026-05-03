@@ -1258,6 +1258,53 @@ export const sanitizeHtmlOutput = (html) => {
   return sanitized.trim();
 };
 
+const unwrapXmlCdata = (value = '') => {
+  const text = String(value ?? '');
+  const match = text.match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
+  return match ? match[1] : text;
+};
+
+const stripPatchEdgeNewlines = (value = '') => (
+  unwrapXmlCdata(value).replace(/^\s*\n/, '').replace(/\n\s*$/, '')
+);
+
+const readXmlTagContent = (source, tagName, searchStart = 0) => {
+  if (!source || !tagName) return null;
+  const openTag = `<${tagName}>`;
+  const closeTag = `</${tagName}>`;
+  const openStart = source.indexOf(openTag, searchStart);
+  if (openStart === -1) return null;
+
+  const contentStart = openStart + openTag.length;
+  const leading = source.slice(contentStart).match(/^\s*<!\[CDATA\[/);
+  if (leading) {
+    const cdataStart = contentStart + leading[0].indexOf('<![CDATA[');
+    const cdataEnd = source.indexOf(']]>', cdataStart + 9);
+    if (cdataEnd !== -1) {
+      const closeStart = source.indexOf(closeTag, cdataEnd + 3);
+      if (closeStart !== -1) {
+        return {
+          openStart,
+          contentStart,
+          end: closeStart,
+          after: closeStart + closeTag.length,
+          content: source.substring(contentStart, closeStart),
+        };
+      }
+    }
+  }
+
+  const closeStart = source.indexOf(closeTag, contentStart);
+  if (closeStart === -1) return null;
+  return {
+    openStart,
+    contentStart,
+    end: closeStart,
+    after: closeStart + closeTag.length,
+    content: source.substring(contentStart, closeStart),
+  };
+};
+
 export const parseXmlChanges = (text) => {
   if (!text) return { thinking: '', changes: [] };
   
@@ -1336,25 +1383,22 @@ export const parseXmlChanges = (text) => {
     const cStart = contentToParse.indexOf('<c', currentIndex);
     if (cStart === -1) break;
     
-    const fromStart = contentToParse.indexOf('<from>', cStart);
-    if (fromStart === -1) break;
-    
-    const fromEnd = contentToParse.indexOf('</from>', fromStart + 6);
-    if (fromEnd === -1) break;
-    
-    const toStart = contentToParse.indexOf('<to>', fromEnd + 7);
+    const fromBlock = readXmlTagContent(contentToParse, 'from', cStart);
+    if (!fromBlock) break;
+
+    const toStart = contentToParse.indexOf('<to>', fromBlock.after);
     if (toStart === -1) break;
     
-    const toEnd = contentToParse.indexOf('</to>', toStart + 4);
-    const cEnd = toEnd !== -1 ? contentToParse.indexOf('</c>', toEnd + 5) : -1;
+    const toBlock = readXmlTagContent(contentToParse, 'to', fromBlock.after);
+    const cEnd = toBlock ? contentToParse.indexOf('</c>', toBlock.after) : -1;
 
-    let findContent = contentToParse.substring(fromStart + 6, fromEnd);
+    let findContent = fromBlock.content;
     let replaceContent = "";
     
-    if (toEnd !== -1) {
+    if (toBlock) {
       // Normal case: complete <to>...</to> block
-      replaceContent = contentToParse.substring(toStart + 4, toEnd);
-      currentIndex = cEnd !== -1 ? cEnd + 4 : toEnd + 5;
+      replaceContent = toBlock.content;
+      currentIndex = cEnd !== -1 ? cEnd + 4 : toBlock.after;
     } else {
       // LLM was cut off mid-response! Harvest everything after <to> tag
       replaceContent = contentToParse.substring(toStart + 4);
@@ -1367,8 +1411,8 @@ export const parseXmlChanges = (text) => {
     }
 
     // Clean leading/trailing newlines but preserve internal whitespace
-    let cleanFind = findContent.replace(/^\n/, '').replace(/\n$/, '');
-    let cleanReplace = replaceContent.replace(/^\n/, '').replace(/\n$/, '');
+    let cleanFind = stripPatchEdgeNewlines(findContent);
+    let cleanReplace = stripPatchEdgeNewlines(replaceContent);
 
     if (cleanFind.length > 0 || cleanReplace.length > 0) {
       changes.push({
@@ -1402,31 +1446,29 @@ export const parseXmlChanges = (text) => {
           // Use a simple inline parse to avoid infinite recursion
           let rescueIndex = 0;
           while (true) {
-            const rescueFromStart = unescaped.indexOf('<from>', rescueIndex);
-            if (rescueFromStart === -1) break;
-            const rescueFromEnd = unescaped.indexOf('</from>', rescueFromStart + 6);
-            if (rescueFromEnd === -1) break;
-            const rescueToStart = unescaped.indexOf('<to>', rescueFromEnd + 7);
+            const rescueFrom = readXmlTagContent(unescaped, 'from', rescueIndex);
+            if (!rescueFrom) break;
+            const rescueToStart = unescaped.indexOf('<to>', rescueFrom.after);
             if (rescueToStart === -1) break;
-            const rescueToEnd = unescaped.indexOf('</to>', rescueToStart + 4);
-            if (rescueToEnd === -1) {
+            const rescueTo = readXmlTagContent(unescaped, 'to', rescueFrom.after);
+            if (!rescueTo) {
               // Truncated — harvest what we can
               const partialTo = unescaped.substring(rescueToStart + 4);
               if (partialTo.length > 0) {
                 changes.push({
                   description: `Rescued Change ${changes.length + 1}`,
-                  find: unescaped.substring(rescueFromStart + 6, rescueFromEnd).replace(/^\n/, '').replace(/\n$/, ''),
-                  replace: partialTo.replace(/^\n/, '').replace(/\n$/, '')
+                  find: stripPatchEdgeNewlines(rescueFrom.content),
+                  replace: stripPatchEdgeNewlines(partialTo)
                 });
               }
               break;
             }
             changes.push({
               description: `Rescued Change ${changes.length + 1}`,
-              find: unescaped.substring(rescueFromStart + 6, rescueFromEnd).replace(/^\n/, '').replace(/\n$/, ''),
-              replace: unescaped.substring(rescueToStart + 4, rescueToEnd).replace(/^\n/, '').replace(/\n$/, '')
+              find: stripPatchEdgeNewlines(rescueFrom.content),
+              replace: stripPatchEdgeNewlines(rescueTo.content)
             });
-            rescueIndex = rescueToEnd + 5;
+            rescueIndex = rescueTo.after;
           }
           if (changes.length > 0) {
             if (jsonObj.thinking && !thinking) thinking = jsonObj.thinking;
@@ -1563,7 +1605,7 @@ export const parseLineBlocks = (raw, maxLines = Infinity) => {
     const range = parseRange(rangeStr);
     if (range && range.start >= 1 && range.end >= range.start && range.end <= maxLines + 1) {
       // Strip a single leading/trailing newline (preserve internal whitespace)
-      const cleaned = replacement.replace(/^\n/, '').replace(/\n$/, '');
+      const cleaned = stripPatchEdgeNewlines(replacement);
       blocks.push({ start: range.start, end: range.end, replacement: cleaned });
     }
 
@@ -1628,29 +1670,24 @@ export const parseCrisprBlocks = (raw) => {
       }
     }
 
-    const fromStart = text.indexOf('<from>', cPos);
-    if (fromStart === -1) break;
+    const fromBlock = readXmlTagContent(text, 'from', cPos);
+    if (!fromBlock) break;
 
-    const fromContentStart = fromStart + 6;
-    const fromEnd = text.indexOf('</from>', fromContentStart);
-    if (fromEnd === -1) break;
-
-    const toStart = text.indexOf('<to>', fromEnd + 7);
+    const toStart = text.indexOf('<to>', fromBlock.after);
     if (toStart === -1) break;
 
-    const toContentStart = toStart + 4;
-    const toEnd = text.indexOf('</to>', toContentStart);
+    const toBlock = readXmlTagContent(text, 'to', fromBlock.after);
 
     let fromContent, toContent;
 
-    if (toEnd !== -1) {
-      fromContent = text.substring(fromContentStart, fromEnd);
-      toContent = text.substring(toContentStart, toEnd);
-      const cEnd = text.indexOf('</c>', toEnd + 5);
-      cursor = cEnd !== -1 ? cEnd + 4 : toEnd + 5;
+    if (toBlock) {
+      fromContent = fromBlock.content;
+      toContent = toBlock.content;
+      const cEnd = text.indexOf('</c>', toBlock.after);
+      cursor = cEnd !== -1 ? cEnd + 4 : toBlock.after;
     } else {
-      fromContent = text.substring(fromContentStart, fromEnd);
-      toContent = text.substring(toContentStart);
+      fromContent = fromBlock.content;
+      toContent = text.substring(toStart + 4);
       const lastValid = toContent.lastIndexOf('>');
       if (lastValid > toContent.length * 0.9) {
         toContent = toContent.substring(0, lastValid + 1);
@@ -1658,8 +1695,8 @@ export const parseCrisprBlocks = (raw) => {
       cursor = text.length;
     }
 
-    fromContent = fromContent.replace(/^\s*\n/, '').replace(/\n\s*$/, '');
-    toContent = toContent.replace(/^\s*\n/, '').replace(/\n\s*$/, '');
+    fromContent = stripPatchEdgeNewlines(fromContent);
+    toContent = stripPatchEdgeNewlines(toContent);
 
     if (fromContent.length > 0 || toContent.length > 0) {
       blocks.push({ find: fromContent, replace: toContent, from: fromContent, to: toContent, description: `Change ${blocks.length + 1}` });

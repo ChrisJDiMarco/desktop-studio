@@ -67,7 +67,7 @@ function JobLogDrawer({ job, desktopLightMode }) {
       className={`border-t ${
         desktopLightMode
           ? "border-gray-100 bg-gradient-to-b from-violet-50/30 to-transparent"
-          : "border-white/8 bg-gradient-to-b from-violet-500/5 to-transparent"
+          : "border-white/[0.08] bg-gradient-to-b from-violet-500/5 to-transparent"
       }`}
     >
       <div
@@ -199,7 +199,7 @@ export function JobCenterPanel({
 
   // The panel grows wider when a job is expanded so the log drawer has room
   // to breathe — closes back to the standard width when no job is selected.
-  const panelWidthClass = effectiveExpandedId ? "w-[34rem]" : "w-[26rem]";
+  const panelWidthClass = effectiveExpandedId ? "w-[36rem]" : "w-[28rem]";
 
   return (
     <AnimatePresence>
@@ -210,28 +210,36 @@ export function JobCenterPanel({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -8, scale: 0.97 }}
           transition={{ duration: 0.15 }}
-          className={`absolute top-10 right-2 ${panelWidthClass} max-w-[calc(100vw-1rem)] rounded-xl border shadow-2xl overflow-hidden ${
-            desktopLightMode ? "border-gray-200 bg-white" : "border-white/10 bg-gray-950/98 backdrop-blur-xl"
+          className={`absolute top-14 right-3 ${panelWidthClass} max-w-[calc(100vw-1.5rem)] rounded-[24px] border backdrop-blur-2xl shadow-2xl overflow-hidden ${
+            desktopLightMode ? "border-white/75 bg-white/[0.96] text-slate-950 shadow-slate-900/20" : "border-white/[0.10] bg-slate-950/[0.90] text-white shadow-black/40"
           }`}
-          style={{ zIndex: 99999, boxShadow: desktopLightMode ? "0 8px 40px rgba(0,0,0,0.14)" : "0 0 0 1px rgba(139,92,246,0.22), 0 8px 40px rgba(0,0,0,0.55)" }}
+          style={{ zIndex: 99999 }}
         >
-          <div className={`flex items-center justify-between px-4 py-2.5 border-b ${desktopLightMode ? "border-gray-100 bg-violet-50/70" : "border-white/8 bg-violet-500/10"}`}>
-            <div className="flex items-center gap-2">
-              <ActivityIcon className="w-3.5 h-3.5 text-violet-400" />
-              <span className={`text-[11px] font-semibold tracking-wide uppercase ${desktopLightMode ? "text-violet-700" : "text-violet-300"}`}>Job Center</span>
-              <span className={`text-[10px] ${desktopLightMode ? "text-gray-400" : "text-gray-500"}`}>{runningCount} active</span>
+          <div className={`flex items-center justify-between px-4 py-3.5 border-b ${
+            desktopLightMode
+              ? "border-slate-200/70 bg-gradient-to-r from-white via-violet-50/80 to-cyan-50/50"
+              : "border-white/[0.08] bg-gradient-to-r from-white/[0.07] via-violet-400/[0.06] to-cyan-400/[0.05]"
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${desktopLightMode ? "bg-violet-100 text-violet-700" : "bg-violet-400/[0.14] text-violet-200"}`}>
+                <ActivityIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <div className={`text-sm font-semibold ${desktopLightMode ? "text-slate-950" : "text-white"}`}>Job Center</div>
+                <div className={`text-[11px] ${desktopLightMode ? "text-slate-500" : "text-white/[0.44]"}`}>{runningCount} active · {jobs.length} total</div>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {jobs.length > 0 && (
                 <button
                   onClick={onClear}
-                  className={`text-[9px] transition-colors ${desktopLightMode ? "text-gray-400 hover:text-red-500" : "text-gray-600 hover:text-red-400"}`}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${desktopLightMode ? "bg-white text-slate-500 hover:text-red-500 shadow-sm" : "bg-white/[0.06] text-white/[0.44] hover:text-red-300"}`}
                 >
                   Clear finished
                 </button>
               )}
-              <button onClick={onClose} className={`transition-colors ${desktopLightMode ? "text-gray-400 hover:text-gray-700" : "text-gray-500 hover:text-gray-300"}`}>
-                <XIcon className="w-3 h-3" />
+              <button onClick={onClose} className={`rounded-full p-1.5 transition-colors ${desktopLightMode ? "text-slate-400 hover:bg-slate-100 hover:text-slate-700" : "text-white/40 hover:bg-white/[0.08] hover:text-white"}`}>
+                <XIcon className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -243,7 +251,7 @@ export function JobCenterPanel({
               <div className="text-[10px] mt-1">New prompts, images, videos, research, and CRISPR edits will appear here.</div>
             </div>
           ) : (
-            <div className={`overflow-y-auto divide-y ${desktopLightMode ? "divide-gray-100" : "divide-white/5"}`} style={{ maxHeight: effectiveExpandedId ? "26rem" : "24rem" }}>
+            <div className="overflow-y-auto p-2.5 space-y-1" style={{ maxHeight: effectiveExpandedId ? "28rem" : "25rem" }}>
               {jobs.map((job) => {
                 const meta = statusMeta[job.status] || statusMeta.running;
                 const canCancel = job.status === "running" || job.status === "queued";
@@ -253,14 +261,14 @@ export function JobCenterPanel({
                     <button
                       type="button"
                       onClick={() => setExpandedJobId((prev) => (prev === job.id ? null : job.id))}
-                      className={`w-full text-left px-4 py-3 transition-colors ${
+                      className={`w-full rounded-2xl border text-left px-3 py-3 transition-colors ${
                         isExpanded
                           ? desktopLightMode
-                            ? "bg-violet-50/70"
-                            : "bg-violet-500/10"
+                            ? "border-violet-100 bg-violet-50/80"
+                            : "border-violet-300/14 bg-violet-400/10"
                           : desktopLightMode
-                            ? "hover:bg-gray-50"
-                            : "hover:bg-white/[0.03]"
+                            ? "border-transparent hover:border-slate-200 hover:bg-slate-50"
+                            : "border-transparent hover:border-white/[0.08] hover:bg-white/[0.045]"
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -338,7 +346,7 @@ export function JobCenterPanel({
             </div>
           )}
 
-          <div className={`flex items-center gap-2 px-4 py-2 border-t ${desktopLightMode ? "border-gray-100 bg-gray-50" : "border-white/8 bg-white/2"}`}>
+          <div className={`flex items-center gap-2 px-4 py-2 border-t ${desktopLightMode ? "border-slate-200/70 bg-slate-50/70" : "border-white/[0.06] bg-white/[0.02]"}`}>
             <TrashIcon className={`w-3 h-3 ${desktopLightMode ? "text-gray-300" : "text-gray-700"}`} />
             <span className={`text-[9px] ${desktopLightMode ? "text-gray-400" : "text-gray-600"}`}>
               {effectiveExpandedId ? "Click a job again to collapse the log drawer." : "Click any job to see the live log timeline."}

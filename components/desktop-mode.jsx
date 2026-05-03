@@ -213,7 +213,7 @@ const DEFAULT_APP_SETTINGS = {
 };
 const DEFAULT_DESKTOP_BACKGROUND = {
   type: 'gradient',
-  value: 'linear-gradient(135deg, #1a1c2e 0%, #16213e 30%, #0f3460 60%, #1a1c2e 100%)',
+  value: 'linear-gradient(135deg, #101827 0%, #12313a 32%, #2a223c 66%, #1d2734 100%)',
 };
 
 const normalizeAppSettings = (settings = {}) => {
@@ -571,6 +571,57 @@ const summarizeValue = (value, limit = 140) => {
   }
 };
 
+const DEFAULT_WORKSPACE_MEMORY = {
+  goal: '',
+  audience: '',
+  tone: '',
+  constraints: '',
+  decisions: [],
+  updatedAt: null,
+};
+
+const normalizeWorkspaceMemory = (value = {}) => {
+  const source = value && typeof value === 'object' ? value : {};
+  return {
+    goal: String(source.goal || '').slice(0, 1200),
+    audience: String(source.audience || '').slice(0, 800),
+    tone: String(source.tone || '').slice(0, 800),
+    constraints: String(source.constraints || '').slice(0, 1200),
+    decisions: (Array.isArray(source.decisions) ? source.decisions : [])
+      .map((decision) => {
+        if (typeof decision === 'string') {
+          return {
+            id: makeDesktopId('memory'),
+            text: decision.slice(0, 420),
+            createdAt: Date.now(),
+          };
+        }
+        if (!decision || typeof decision !== 'object') return null;
+        const text = String(decision.text || '').trim().slice(0, 420);
+        if (!text) return null;
+        return {
+          id: typeof decision.id === 'string' && decision.id ? decision.id : makeDesktopId('memory'),
+          text,
+          createdAt: typeof decision.createdAt === 'number' ? decision.createdAt : Date.now(),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 16),
+    updatedAt: typeof source.updatedAt === 'number' ? source.updatedAt : null,
+  };
+};
+
+const getWorkspaceMemoryLines = (memory = {}) => {
+  const safe = normalizeWorkspaceMemory(memory);
+  return [
+    safe.goal.trim() ? `Goal: ${safe.goal.trim()}` : null,
+    safe.audience.trim() ? `Audience: ${safe.audience.trim()}` : null,
+    safe.tone.trim() ? `Voice / taste: ${safe.tone.trim()}` : null,
+    safe.constraints.trim() ? `Constraints: ${safe.constraints.trim()}` : null,
+    safe.decisions.length ? `Recent decisions:\n${safe.decisions.map((d, i) => `${i + 1}. ${d.text}`).join('\n')}` : null,
+  ].filter(Boolean);
+};
+
 // Infer a lightweight runtime schema for a value sampled off the desktop bus.
 // We use this to label connection edges so a user hovering a wire can see
 // "downstream receives { articles: Array<{title,url}>, generatedAt: string }"
@@ -640,54 +691,6 @@ const stringifyForThinkletSource = (value) => JSON.stringify(value ?? null)
   .replace(/>/g, '\\u003e')
   .replace(/\u2028/g, '\\u2028')
   .replace(/\u2029/g, '\\u2029');
-
-// Starter prompts shown in the automation suggestions strip. Picked to span
-// the most common shapes (research → digest, scheduled refresh, event-driven,
-// data join, notification) so the user can see at a glance what kinds of
-// outcomes Automation Mode produces. Clicking a chip drops the prompt into
-// the input rather than auto-submitting — the user reviews and tweaks first.
-const AUTOMATION_PROMPT_TEMPLATES = [
-  {
-    id: 'morning-briefing',
-    icon: '☀️',
-    label: 'Morning briefing',
-    prompt: 'Build a morning briefing automation that summarizes my unread emails, today\'s calendar events, and the top tech news, then publishes a single dashboard.',
-    suggestedRunMode: 'interval',
-    suggestedIntervalMin: 1440,
-  },
-  {
-    id: 'inbox-triage',
-    icon: '📥',
-    label: 'Inbox triage',
-    prompt: 'Watch my inbox for new emails, classify each as urgent / FYI / spam, draft a one-line reply for the urgent ones, and surface them in a triage queue.',
-    suggestedRunMode: 'bus',
-    suggestedIntervalMin: 30,
-  },
-  {
-    id: 'research-digest',
-    icon: '🔎',
-    label: 'Research digest',
-    prompt: 'Every morning, search the web for the latest news on a topic I specify, dedupe the findings against yesterday\'s digest, and post a markdown summary.',
-    suggestedRunMode: 'interval',
-    suggestedIntervalMin: 1440,
-  },
-  {
-    id: 'standup-notes',
-    icon: '🧑‍💻',
-    label: 'Standup notes',
-    prompt: 'Take my recent commits and PR descriptions, group them by project, and produce a 4-bullet "what I did yesterday / what I\'m doing today" summary.',
-    suggestedRunMode: 'once',
-    suggestedIntervalMin: 0,
-  },
-  {
-    id: 'feedback-classifier',
-    icon: '💬',
-    label: 'Feedback classifier',
-    prompt: 'When user feedback lands on the bus, classify it (bug / feature request / praise / churn risk), tag it, and route bug reports to a triage panel.',
-    suggestedRunMode: 'bus',
-    suggestedIntervalMin: 0,
-  },
-];
 
 const buildAutomationAgentThinklet = (spec = {}) => {
   const safeSpec = stringifyForThinkletSource({
@@ -1690,7 +1693,7 @@ const DesktopDock = React.memo(({
 }) => {
   const dark = !desktopLightMode;
   return (
-    <div className="h-[72px] flex-shrink-0 flex items-end justify-center pb-2 pt-1 px-4 z-20 relative pointer-events-none">
+    <div className="absolute inset-x-0 bottom-3 z-30 flex justify-center px-4 pointer-events-none">
       <motion.div
         initial={{ y: 10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -1799,10 +1802,732 @@ const DesktopDock = React.memo(({
 });
 DesktopDock.displayName = 'DesktopDock';
 
+const ARTIFACT_RESIZE_CORNERS = [
+  {
+    corner: 'top-left',
+    className: '-top-1 -left-1 h-4 w-4 cursor-nwse-resize',
+    title: 'Drag top-left corner to resize',
+  },
+  {
+    corner: 'top-right',
+    className: '-top-1 -right-1 h-4 w-4 cursor-nesw-resize',
+    title: 'Drag top-right corner to resize',
+  },
+  {
+    corner: 'bottom-left',
+    className: '-bottom-1 -left-1 h-4 w-4 cursor-nesw-resize',
+    title: 'Drag bottom-left corner to resize',
+  },
+  {
+    corner: 'bottom-right',
+    className: 'bottom-0 right-0 h-6 w-6 cursor-nwse-resize group/resize',
+    title: 'Drag to resize',
+    showIndicator: true,
+  },
+];
+
+function ArtifactResizeHandles({ artifactId, onResizeStart }) {
+  return (
+    <>
+      {ARTIFACT_RESIZE_CORNERS.map(({ corner, className, title, showIndicator }) => (
+        <div
+          key={corner}
+          onMouseDown={(e) => onResizeStart(e, artifactId, corner)}
+          className={`absolute z-40 ${className}`}
+          title={title}
+          aria-label={title}
+        >
+          {showIndicator && (
+            <div className="absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-white/30 group-hover/resize:border-cyan-400 transition-colors rounded-br-sm" />
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function WorkspaceMemoryModal({ isOpen, onClose, memory, onChange, desktopLightMode, artifactCount, connectionCount }) {
+  const [decisionDraft, setDecisionDraft] = useState('');
+  const dark = !desktopLightMode;
+  const safeMemory = normalizeWorkspaceMemory(memory);
+  const memoryLines = getWorkspaceMemoryLines(safeMemory);
+  const fieldClass = `w-full rounded-2xl border px-3.5 py-3 text-sm leading-5 outline-none transition-colors ${
+    dark
+      ? 'border-white/[0.08] bg-white/[0.045] text-white placeholder:text-white/28 focus:border-cyan-300/40 focus:bg-white/[0.07]'
+      : 'border-slate-200 bg-white/80 text-slate-900 placeholder:text-slate-400 focus:border-cyan-300 focus:bg-white'
+  }`;
+  const labelClass = `mb-1.5 block text-[10px] font-bold uppercase tracking-[0.16em] ${dark ? 'text-white/38' : 'text-slate-400'}`;
+
+  const patchMemory = useCallback((patch) => {
+    onChange((prev) => normalizeWorkspaceMemory({
+      ...normalizeWorkspaceMemory(prev),
+      ...patch,
+      updatedAt: Date.now(),
+    }));
+  }, [onChange]);
+
+  const addDecision = useCallback(() => {
+    const text = decisionDraft.trim().slice(0, 420);
+    if (!text) return;
+    onChange((prev) => {
+      const current = normalizeWorkspaceMemory(prev);
+      return normalizeWorkspaceMemory({
+        ...current,
+        decisions: [
+          { id: makeDesktopId('memory'), text, createdAt: Date.now() },
+          ...current.decisions,
+        ],
+        updatedAt: Date.now(),
+      });
+    });
+    setDecisionDraft('');
+  }, [decisionDraft, onChange]);
+
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 flex items-center justify-center bg-black/45 p-4 backdrop-blur-md"
+      style={{ zIndex: 99999 }}
+      onMouseDown={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.96 }}
+        transition={{ duration: 0.18 }}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-[30px] border shadow-2xl ${
+          dark
+            ? 'border-white/[0.10] bg-slate-950/[0.94] text-white shadow-black/50'
+            : 'border-white/80 bg-white/[0.97] text-slate-950 shadow-slate-900/20'
+        }`}
+      >
+        <div className={`border-b px-5 py-4 ${dark ? 'border-white/[0.08] bg-white/[0.035]' : 'border-slate-200/70 bg-slate-50/70'}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20">
+                <BrainIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">Workspace Memory</h2>
+                <p className={`mt-0.5 text-xs ${dark ? 'text-white/48' : 'text-slate-500'}`}>
+                  Persistent intent injected into every build, edit, and automation.
+                </p>
+              </div>
+            </div>
+            <button onClick={onClose} className={`rounded-full p-2 transition-colors ${dark ? 'text-white/44 hover:bg-white/[0.08] hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}>
+              <XIcon className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[
+              { label: 'Artifacts', value: artifactCount, Icon: LayoutIcon },
+              { label: 'Relationships', value: connectionCount, Icon: GitBranchIcon },
+              { label: 'Memory Items', value: memoryLines.length, Icon: FileTextIcon },
+            ].map(({ label, value, Icon }) => (
+              <div key={label} className={`rounded-2xl border px-3 py-2 ${dark ? 'border-white/[0.07] bg-white/[0.04]' : 'border-slate-200/70 bg-white/80'}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[9px] font-bold uppercase tracking-[0.15em] ${dark ? 'text-white/34' : 'text-slate-400'}`}>{label}</span>
+                  <Icon className={`h-3.5 w-3.5 ${dark ? 'text-cyan-200/70' : 'text-cyan-600'}`} />
+                </div>
+                <div className="mt-1 text-xl font-black tabular-nums">{value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1.15fr_0.85fr]">
+          <div className={`min-h-0 overflow-y-auto p-5 ${dark ? 'bg-slate-950/40' : 'bg-white'}`}>
+            <div className="space-y-4">
+              <div>
+                <label className={labelClass}>What this workspace is trying to become</label>
+                <textarea
+                  value={safeMemory.goal}
+                  onChange={(e) => patchMemory({ goal: e.target.value })}
+                  rows={4}
+                  placeholder="Example: A premium AI desktop for creating, improving, connecting, and automating visual artifacts."
+                  className={`${fieldClass} resize-none`}
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Audience</label>
+                  <textarea
+                    value={safeMemory.audience}
+                    onChange={(e) => patchMemory({ audience: e.target.value })}
+                    rows={3}
+                    placeholder="Who should this feel obvious and useful for?"
+                    className={`${fieldClass} resize-none`}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Taste / voice</label>
+                  <textarea
+                    value={safeMemory.tone}
+                    onChange={(e) => patchMemory({ tone: e.target.value })}
+                    rows={3}
+                    placeholder="Apple-clean, Google-approachable, powerful without feeling technical..."
+                    className={`${fieldClass} resize-none`}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Constraints and non-negotiables</label>
+                <textarea
+                  value={safeMemory.constraints}
+                  onChange={(e) => patchMemory({ constraints: e.target.value })}
+                  rows={4}
+                  placeholder="Things the AI should preserve, avoid, or always consider."
+                  className={`${fieldClass} resize-none`}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className={`min-h-0 overflow-y-auto border-t p-5 md:border-l md:border-t-0 ${dark ? 'border-white/[0.08] bg-white/[0.025]' : 'border-slate-200/70 bg-slate-50/70'}`}>
+            <div className="mb-4">
+              <label className={labelClass}>Decisions to remember</label>
+              <div className="flex gap-2">
+                <input
+                  value={decisionDraft}
+                  onChange={(e) => setDecisionDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addDecision();
+                    }
+                  }}
+                  placeholder="Add a design or product decision..."
+                  className={`${fieldClass} min-w-0 flex-1 py-2.5 text-xs`}
+                />
+                <button
+                  onClick={addDecision}
+                  disabled={!decisionDraft.trim()}
+                  className="rounded-2xl bg-cyan-500 px-3 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 transition-colors hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {safeMemory.decisions.length === 0 ? (
+              <div className={`rounded-2xl border border-dashed p-5 text-center text-xs ${dark ? 'border-white/10 text-white/38' : 'border-slate-200 text-slate-400'}`}>
+                Decisions you add here become durable project context.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {safeMemory.decisions.map((decision) => (
+                  <div key={decision.id} className={`group rounded-2xl border px-3 py-2.5 ${dark ? 'border-white/[0.07] bg-white/[0.04]' : 'border-slate-200/70 bg-white'}`}>
+                    <div className="flex items-start gap-2">
+                      <CheckIcon className={`mt-0.5 h-3.5 w-3.5 flex-shrink-0 ${dark ? 'text-emerald-300' : 'text-emerald-600'}`} />
+                      <div className={`min-w-0 flex-1 text-xs leading-5 ${dark ? 'text-white/74' : 'text-slate-700'}`}>{decision.text}</div>
+                      <button
+                        onClick={() => onChange((prev) => {
+                          const current = normalizeWorkspaceMemory(prev);
+                          return normalizeWorkspaceMemory({
+                            ...current,
+                            decisions: current.decisions.filter((d) => d.id !== decision.id),
+                            updatedAt: Date.now(),
+                          });
+                        })}
+                        className={`rounded-full p-1 opacity-0 transition-all group-hover:opacity-100 ${dark ? 'text-white/32 hover:bg-white/[0.08] hover:text-rose-200' : 'text-slate-300 hover:bg-rose-50 hover:text-rose-500'}`}
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className={`mt-4 rounded-2xl border px-3 py-3 text-[11px] leading-5 ${dark ? 'border-cyan-300/14 bg-cyan-300/[0.055] text-cyan-100/70' : 'border-cyan-100 bg-cyan-50 text-cyan-800/70'}`}>
+              Memory is separate from Brand Prompt: use memory for product intent and decisions, Brand Prompt for visual voice and identity.
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function DesktopDropOverlay({ active, desktopLightMode }) {
+  if (!active) return null;
+  const dark = !desktopLightMode;
+  const cards = [
+    { label: 'Images', detail: 'Attach as visual references', Icon: ImageIcon, tone: 'from-rose-400 to-amber-300' },
+    { label: 'Documents', detail: 'Upload and add to the prompt', Icon: FileTextIcon, tone: 'from-cyan-400 to-blue-500' },
+    { label: 'Links', detail: 'Paste URLs into the build brief', Icon: GlobeIcon, tone: 'from-emerald-400 to-teal-500' },
+  ];
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-3 z-[9990] pointer-events-none"
+    >
+      <div className={`flex h-full items-center justify-center rounded-[34px] border-2 border-dashed backdrop-blur-xl ${
+        dark ? 'border-cyan-200/30 bg-slate-950/64 text-white' : 'border-cyan-400/40 bg-white/72 text-slate-950'
+      } shadow-2xl`}>
+        <motion.div
+          initial={{ scale: 0.96, y: 8 }}
+          animate={{ scale: 1, y: 0 }}
+          className="w-full max-w-3xl px-6 text-center"
+        >
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[24px] bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-2xl shadow-cyan-500/25">
+            <UploadIcon className="h-7 w-7" />
+          </div>
+          <h3 className="text-3xl font-semibold tracking-tight">Drop anything into the workspace</h3>
+          <p className={`mx-auto mt-3 max-w-xl text-sm leading-6 ${dark ? 'text-white/58' : 'text-slate-500'}`}>
+            Files, screenshots, PDFs, and links become prompt context immediately.
+          </p>
+          <div className="mt-7 grid grid-cols-3 gap-3">
+            {cards.map(({ label, detail, Icon, tone }) => (
+              <div key={label} className={`rounded-2xl border p-4 text-left ${dark ? 'border-white/10 bg-white/[0.06]' : 'border-white/80 bg-white/80 shadow-sm'}`}>
+                <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${tone} text-white shadow-lg shadow-black/10`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="text-sm font-bold">{label}</div>
+                <div className={`mt-1 text-xs ${dark ? 'text-white/46' : 'text-slate-500'}`}>{detail}</div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+function ArtifactRelationshipPanel({ isOpen, onClose, artifacts, connections, stacks, busKeys, desktopLightMode, onFocusArtifact, onRemoveConnection }) {
+  if (!isOpen) return null;
+  const dark = !desktopLightMode;
+  const artifactById = new Map((artifacts || []).map((artifact) => [artifact.id, artifact]));
+  const connectedIds = new Set();
+  (connections || []).forEach((conn) => {
+    if (conn.fromId) connectedIds.add(conn.fromId);
+    if (conn.toId) connectedIds.add(conn.toId);
+  });
+  (stacks || []).forEach((stack) => (stack.artifactIds || []).forEach((id) => connectedIds.add(id)));
+  const orphanArtifacts = (artifacts || []).filter((artifact) => !connectedIds.has(artifact.id) && !artifact.isLoading).slice(0, 8);
+  const connectionRows = (connections || []).map((conn) => ({
+    conn,
+    from: artifactById.get(conn.fromId),
+    to: artifactById.get(conn.toId),
+  }));
+
+  return (
+    <motion.div
+      key="relationship-panel"
+      initial={{ opacity: 0, y: -8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.97 }}
+      transition={{ duration: 0.16 }}
+      className={`absolute right-3 top-14 w-[560px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[24px] border backdrop-blur-2xl shadow-2xl ${
+        dark ? 'border-white/[0.10] bg-slate-950/[0.92] text-white shadow-black/44' : 'border-white/75 bg-white/[0.97] text-slate-950 shadow-slate-900/18'
+      }`}
+      style={{ zIndex: 99999 }}
+    >
+      <div className={`border-b px-4 py-3.5 ${dark ? 'border-white/[0.08] bg-white/[0.035]' : 'border-slate-200/70 bg-slate-50/70'}`}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-lg shadow-violet-500/20">
+              <NetworkIcon className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold">Artifact Relationships</div>
+              <div className={`truncate text-[11px] ${dark ? 'text-white/44' : 'text-slate-500'}`}>
+                {artifacts.length} windows · {connections.length} edges · {stacks.length} chains · {busKeys.length} bus keys
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className={`rounded-full p-1.5 transition-colors ${dark ? 'text-white/42 hover:bg-white/[0.08] hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}>
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          {[
+            { label: 'Edges', value: connections.length, Icon: GitBranchIcon },
+            { label: 'Chains', value: stacks.length, Icon: LayersIcon },
+            { label: 'Live Keys', value: busKeys.length, Icon: ServerIcon },
+            { label: 'Solo', value: orphanArtifacts.length, Icon: LayoutIcon },
+          ].map(({ label, value, Icon }) => (
+            <div key={label} className={`rounded-xl border px-3 py-2 ${dark ? 'border-white/[0.08] bg-white/[0.04]' : 'border-slate-200/70 bg-white'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-[9px] uppercase tracking-[0.12em] ${dark ? 'text-white/34' : 'text-slate-400'}`}>{label}</span>
+                <Icon className={`h-3 w-3 ${dark ? 'text-cyan-200/70' : 'text-cyan-600'}`} />
+              </div>
+              <div className="mt-1 text-lg font-black tabular-nums">{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid max-h-[560px] grid-cols-1 overflow-hidden md:grid-cols-[1fr_0.86fr]">
+        <div className={`min-h-0 overflow-y-auto border-r p-3 ${dark ? 'border-white/[0.08]' : 'border-slate-200/70'}`}>
+          <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest ${dark ? 'text-white/36' : 'text-slate-400'}`}>
+            <GitBranchIcon className="h-3 w-3" />
+            Directed Edges
+          </div>
+          {connectionRows.length === 0 ? (
+            <div className={`rounded-2xl border border-dashed p-5 text-center text-xs ${dark ? 'border-white/10 text-white/38' : 'border-slate-200 text-slate-400'}`}>
+              No relationships yet. Use the blue connector dot on a window to wire artifacts together.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {connectionRows.map(({ conn, from, to }) => (
+                <div key={conn.id} className={`rounded-2xl border p-3 ${dark ? 'border-white/[0.08] bg-white/[0.04]' : 'border-slate-200/70 bg-white'}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="mt-1 h-2 w-2 rounded-full bg-cyan-400" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold">
+                        <button onClick={() => from && onFocusArtifact(from.id)} className="truncate hover:underline">{from?.title || 'Missing source'}</button>
+                        <span className={dark ? 'text-white/28' : 'text-slate-300'}>→</span>
+                        <button onClick={() => to && onFocusArtifact(to.id)} className="truncate hover:underline">{to?.title || 'Missing target'}</button>
+                      </div>
+                      <div className={`mt-1 text-[10px] leading-4 ${dark ? 'text-white/42' : 'text-slate-500'}`}>
+                        {conn.reason || conn.label || conn.mode || 'Artifact handoff'}
+                      </div>
+                      {(conn.busKey || conn.schema) && (
+                        <div className={`mt-2 rounded-lg px-2 py-1 font-mono text-[9px] ${dark ? 'bg-black/24 text-cyan-100/64' : 'bg-cyan-50 text-cyan-800/70'}`}>
+                          {conn.busKey || renderSchemaInline(conn.schema)}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => onRemoveConnection(conn.id)} className={`rounded-full p-1 transition-colors ${dark ? 'text-white/28 hover:bg-white/[0.08] hover:text-rose-200' : 'text-slate-300 hover:bg-rose-50 hover:text-rose-500'}`}>
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={`min-h-0 overflow-y-auto p-3 ${dark ? 'bg-white/[0.015]' : 'bg-slate-50/60'}`}>
+          <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest ${dark ? 'text-white/36' : 'text-slate-400'}`}>
+            <LayersIcon className="h-3 w-3" />
+            Chains
+          </div>
+          {stacks.length === 0 ? (
+            <div className={`rounded-2xl border border-dashed p-4 text-center text-xs ${dark ? 'border-white/10 text-white/38' : 'border-slate-200 text-slate-400'}`}>
+              Chains created in Automation Studio will appear here.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {stacks.slice(0, 6).map((stack) => (
+                <div key={stack.id} className={`rounded-2xl border px-3 py-2.5 ${dark ? 'border-white/[0.08] bg-white/[0.04]' : 'border-slate-200/70 bg-white'}`}>
+                  <div className="truncate text-xs font-bold">{stack.name || 'Untitled chain'}</div>
+                  <div className={`mt-1 text-[10px] ${dark ? 'text-white/42' : 'text-slate-500'}`}>{(stack.artifactIds || []).length} artifacts</div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(stack.artifactIds || []).slice(0, 5).map((id) => {
+                      const artifact = artifactById.get(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => artifact && onFocusArtifact(id)}
+                          className={`max-w-full truncate rounded-full px-2 py-1 text-[9px] font-semibold ${dark ? 'bg-white/[0.07] text-white/56 hover:text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-900'}`}
+                        >
+                          {artifact?.title || 'Missing'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className={`mb-2 mt-4 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest ${dark ? 'text-white/36' : 'text-slate-400'}`}>
+            <TargetIcon className="h-3 w-3" />
+            Unlinked Windows
+          </div>
+          {orphanArtifacts.length === 0 ? (
+            <div className={`rounded-2xl border border-dashed p-4 text-center text-xs ${dark ? 'border-white/10 text-white/38' : 'border-slate-200 text-slate-400'}`}>
+              Every ready window is part of a relationship.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {orphanArtifacts.map((artifact) => (
+                <button
+                  key={artifact.id}
+                  onClick={() => onFocusArtifact(artifact.id)}
+                  className={`w-full truncate rounded-xl border px-3 py-2 text-left text-[11px] font-semibold transition-colors ${dark ? 'border-white/[0.07] bg-white/[0.035] text-white/64 hover:bg-white/[0.07] hover:text-white' : 'border-slate-200/70 bg-white text-slate-600 hover:text-slate-950'}`}
+                >
+                  {artifact.title || 'Untitled'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function ArtifactBuildPreview({ artifact, desktopLightMode, job }) {
+  const dark = !desktopLightMode;
+  const progress = clampNumber(Number(job?.progress ?? 18), 6, 100);
+  const phaseLabel = job?.phase || (artifact?.type === 'image' ? 'Generating image' : artifact?.type === 'video' ? 'Generating video' : 'Composing interface');
+  const logs = Array.isArray(job?.logs) ? job.logs.slice(-3) : [];
+  const phases = [
+    { label: 'Intent', Icon: TargetIcon, delay: 0.1, color: 'from-sky-400 to-cyan-300' },
+    { label: 'Structure', Icon: LayersIcon, delay: 0.45, color: 'from-violet-400 to-fuchsia-300' },
+    { label: 'Content', Icon: FileTextIcon, delay: 0.8, color: 'from-emerald-400 to-teal-300' },
+    { label: 'Polish', Icon: ActivityIcon, delay: 1.15, color: 'from-amber-300 to-orange-300' },
+  ];
+  const previewTitle = artifact?.language === 'react' ? 'Building Thinklet' : 'Building HTML';
+  const title = artifact?.title || 'Artifact';
+
+  const layerTransition = (delay = 0) => ({
+    duration: 0.52,
+    delay,
+    ease: [0.22, 1, 0.36, 1],
+  });
+
+  return (
+    <div
+      className={`absolute inset-0 overflow-hidden ${dark ? 'bg-slate-950' : 'bg-slate-100'}`}
+      aria-label={previewTitle}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background: dark
+            ? 'linear-gradient(135deg, #020617 0%, #0f172a 42%, #111827 100%)'
+            : 'linear-gradient(135deg, #f8fafc 0%, #eef6ff 48%, #f7f7fb 100%)',
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-40"
+        style={{
+          backgroundImage: dark
+            ? 'linear-gradient(rgba(255,255,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.055) 1px, transparent 1px)'
+            : 'linear-gradient(rgba(15,23,42,0.065) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.055) 1px, transparent 1px)',
+          backgroundSize: '34px 34px',
+          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.18))',
+        }}
+      />
+
+      <div className="relative z-10 flex h-full flex-col gap-3 p-4">
+        <div className="flex items-center justify-between">
+          <div className="min-w-0">
+            <div className={`text-[10px] font-bold uppercase tracking-[0.22em] ${dark ? 'text-white/45' : 'text-slate-500'}`}>
+              {previewTitle}
+            </div>
+            <div className={`mt-1 truncate text-sm font-semibold ${dark ? 'text-white/90' : 'text-slate-900'}`}>
+              {title}
+            </div>
+          </div>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${
+              dark ? 'border-white/10 bg-white/[0.07] text-cyan-200' : 'border-slate-200 bg-white text-sky-600'
+            } shadow-lg shadow-sky-500/10`}
+          >
+            <SparklesIcon className="h-5 w-5" />
+          </motion.div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          {phases.map(({ label, Icon, delay, color }) => (
+            <motion.div
+              key={label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={layerTransition(delay)}
+              className={`rounded-xl border px-2 py-2 ${
+                dark ? 'border-white/10 bg-white/[0.06]' : 'border-slate-200/80 bg-white/80'
+              }`}
+            >
+              <div className={`mb-1 flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br ${color} text-white shadow-sm`}>
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <div className={`truncate text-[9px] font-semibold ${dark ? 'text-white/58' : 'text-slate-600'}`}>
+                {label}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={layerTransition(0.32)}
+          className={`rounded-2xl border px-3 py-2.5 ${
+            dark ? 'border-white/10 bg-white/[0.055]' : 'border-slate-200/80 bg-white/82'
+          }`}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className={`truncate text-xs font-bold ${dark ? 'text-white/82' : 'text-slate-800'}`}>{phaseLabel}</div>
+              <div className={`mt-0.5 text-[10px] ${dark ? 'text-white/38' : 'text-slate-500'}`}>
+                Staging the artifact in layers so the window feels alive while the full file resolves.
+              </div>
+            </div>
+            <div className={`rounded-full px-2 py-1 text-[10px] font-black tabular-nums ${dark ? 'bg-cyan-300/12 text-cyan-100' : 'bg-cyan-50 text-cyan-700'}`}>
+              {Math.round(progress)}%
+            </div>
+          </div>
+          <div className={`h-1.5 overflow-hidden rounded-full ${dark ? 'bg-white/10' : 'bg-slate-200'}`}>
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-violet-400 to-emerald-300"
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </div>
+          {logs.length > 0 && (
+            <div className={`mt-2 grid gap-1 text-[9px] ${dark ? 'text-white/40' : 'text-slate-500'}`}>
+              {logs.map((log, idx) => (
+                <div key={`${log.at || idx}-${log.message || idx}`} className="flex items-center gap-1.5 truncate">
+                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${log.level === 'error' ? 'bg-rose-400' : log.level === 'success' ? 'bg-emerald-400' : 'bg-cyan-300'}`} />
+                  <span className="truncate">{log.message || log.phase || 'Working'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        <div className={`relative min-h-0 flex-1 overflow-hidden rounded-2xl border ${
+          dark ? 'border-white/12 bg-slate-900/60 shadow-2xl shadow-black/25' : 'border-slate-200 bg-white/88 shadow-2xl shadow-slate-300/40'
+        }`}>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={layerTransition(0.05)}
+            className="absolute inset-0"
+            style={{
+              background: dark
+                ? 'linear-gradient(145deg, rgba(14,165,233,0.18), rgba(99,102,241,0.11) 42%, rgba(15,23,42,0.4))'
+                : 'linear-gradient(145deg, rgba(14,165,233,0.12), rgba(99,102,241,0.08) 42%, rgba(255,255,255,0.72))',
+            }}
+          />
+          <div className="relative z-10 flex h-full flex-col gap-3 p-3">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={layerTransition(0.22)}
+              className={`flex items-center justify-between rounded-xl border px-3 py-2 ${
+                dark ? 'border-white/10 bg-white/[0.07]' : 'border-slate-200 bg-white/90'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-300/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+              </div>
+              <div className={`h-2 w-24 rounded-full ${dark ? 'bg-white/18' : 'bg-slate-200'}`} />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={layerTransition(0.5)}
+              className={`rounded-2xl border p-4 ${
+                dark ? 'border-white/10 bg-white/[0.06]' : 'border-slate-200 bg-white/72'
+              }`}
+            >
+              <motion.div
+                animate={{ opacity: [0.55, 1, 0.55] }}
+                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="mb-3 h-3 w-20 rounded-full bg-gradient-to-r from-sky-400 to-cyan-300"
+              />
+              <div className={`mb-2 h-6 w-3/4 rounded-full ${dark ? 'bg-white/20' : 'bg-slate-300'}`} />
+              <div className={`h-3 w-5/6 rounded-full ${dark ? 'bg-white/12' : 'bg-slate-200'}`} />
+              <div className={`mt-2 h-3 w-1/2 rounded-full ${dark ? 'bg-white/12' : 'bg-slate-200'}`} />
+            </motion.div>
+
+            <div className="grid min-h-0 flex-1 grid-cols-3 gap-3">
+              {[0, 1, 2].map((idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 22, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={layerTransition(0.72 + idx * 0.12)}
+                  className={`rounded-2xl border p-3 ${
+                    dark ? 'border-white/10 bg-white/[0.055]' : 'border-slate-200 bg-white/78'
+                  }`}
+                >
+                  <div className={`mb-3 h-16 rounded-xl ${dark ? 'bg-white/10' : 'bg-slate-100'}`}>
+                    <motion.div
+                      className="h-full rounded-xl bg-gradient-to-br from-cyan-400/50 via-violet-400/40 to-fuchsia-400/40"
+                      animate={{ opacity: [0.35, 0.85, 0.35] }}
+                      transition={{ duration: 2.2, delay: idx * 0.2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                  </div>
+                  <div className={`mb-2 h-2.5 w-3/4 rounded-full ${dark ? 'bg-white/18' : 'bg-slate-300'}`} />
+                  <div className={`h-2 w-1/2 rounded-full ${dark ? 'bg-white/11' : 'bg-slate-200'}`} />
+                </motion.div>
+              ))}
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={layerTransition(1.12)}
+              className={`overflow-hidden rounded-xl border ${
+                dark ? 'border-white/10 bg-white/[0.055]' : 'border-slate-200 bg-white/75'
+              }`}
+            >
+              <motion.div
+                className="h-1 bg-gradient-to-r from-sky-400 via-violet-400 to-emerald-300"
+                animate={{ x: ['-70%', '110%'] }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                style={{ width: '70%' }}
+              />
+              <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-3 py-2">
+                <div className={`h-2.5 rounded-full ${dark ? 'bg-white/16' : 'bg-slate-200'}`} />
+                <div className={`h-2.5 w-14 rounded-full ${dark ? 'bg-white/12' : 'bg-slate-200'}`} />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function parseHtmlPatchBlocksFromResponse(result) {
+  let blocks = parseCrisprBlocks(result) || [];
+  if (blocks.length > 0) return blocks;
+
+  const xmlParsed = parseXmlChanges(result);
+  if (xmlParsed?.changes?.length > 0) {
+    blocks = xmlParsed.changes.filter(c => (
+      c &&
+      typeof c.find === 'string' &&
+      c.find.length > 0 &&
+      typeof c.replace === 'string'
+    ));
+    if (blocks.length > 0) return blocks;
+  }
+
+  const jsonParsed = parseFindReplaceOperations(result);
+  if (jsonParsed.success && jsonParsed.operations.length > 0) {
+    return jsonParsed.operations;
+  }
+
+  return [];
+}
+
+function summarizePatchResults(applyResult) {
+  const results = Array.isArray(applyResult?.results) ? applyResult.results : [];
+  const failed = results
+    .filter(r => !r.success)
+    .slice(0, 4)
+    .map((r, idx) => `${idx + 1}. ${r.error || 'Pattern did not match'}${r.hint ? ` (${r.hint})` : ''}. Pattern: ${(r.find || r.from || '').substring(0, 180)}`)
+    .join('\n');
+  return failed || 'No patches matched the current source.';
+}
+
 // ─── ArtifactWindow (memoized per-artifact render unit) ────────────────────
 function ArtifactWindowInner({
   artifact,
   appProject,
+  buildJob,
   isCrisprActive, crisprInput, isCrisprPending, crisprStatus,
   isDropdownOpen, isActionsDropdownOpen, isAgencySetup, isAutoActive, isBeautifyActive,
   isConnecting, connectingFromId,
@@ -2259,20 +2984,10 @@ function ArtifactWindowInner({
                               className="absolute inset-0 cursor-grab active:cursor-grabbing"
                               onMouseDown={(e) => handleDesktopDragStart(e, artifact.id)}
                             >
-                              <div
-                                onMouseDown={(e) => handleDesktopResizeStart(e, artifact.id)}
-                                className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-30 group/resize"
-                                title="Drag to resize"
-                              >
-                                <div className="absolute bottom-1.5 right-1.5 w-3 h-3 border-b-2 border-r-2 border-white/30 group-hover/resize:border-cyan-400 transition-colors rounded-br-sm" />
-                              </div>
                               {artifact.isMinimized ? (
                                 <div className="absolute inset-0 bg-gray-800" />
                               ) : artifact.isLoading ? (
-                                <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center gap-3">
-                                  <RefreshCwIcon className={`w-8 h-8 animate-spin ${artifact.type === 'image' ? 'text-pink-400' : 'text-fuchsia-400'}`} />
-                                  <span className="text-xs text-white/50 font-medium">Generating {artifact.type}...</span>
-                                </div>
+                                <ArtifactBuildPreview artifact={artifact} desktopLightMode={desktopLightMode} job={buildJob} />
                               ) : artifact.type === 'image' && artifact.mediaUrl ? (
                                 <div
                                   className={`relative w-full h-full ${interactiveMode === 'zoom' ? 'cursor-crosshair' : ''}`}
@@ -2515,6 +3230,7 @@ function ArtifactWindowInner({
                             </AnimatePresence>
                           </div>
                         </div>
+                        <ArtifactResizeHandles artifactId={artifact.id} onResizeStart={handleDesktopResizeStart} />
                       </motion.div>
                     );
                   }
@@ -2942,22 +3658,7 @@ function ArtifactWindowInner({
                           {artifact.isMinimized ? (
                             <div className="absolute inset-0 bg-gray-200 dark:bg-gray-800" />
                           ) : artifact.isLoading ? (
-                            <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center gap-3">
-                              <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                              >
-                                <SparklesIcon className="w-8 h-8 text-violet-400" />
-                              </motion.div>
-                              <span className="text-xs text-white/50 font-medium">Generating...</span>
-                              <div className="w-32 h-1 bg-gray-800 rounded-full overflow-hidden mt-1">
-                                <motion.div
-                                  className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full"
-                                  animate={{ width: ['0%', '60%', '80%', '60%'] }}
-                                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                                />
-                              </div>
-                            </div>
+                            <ArtifactBuildPreview artifact={artifact} desktopLightMode={desktopLightMode} job={buildJob} />
                           ) : (
                             <>
                               {isVisible ? (
@@ -3100,15 +3801,6 @@ function ArtifactWindowInner({
                               })()}
                             </>
                           )}
-
-                          {/* Resize Handle — bottom right corner */}
-                          <div
-                            onMouseDown={(e) => handleDesktopResizeStart(e, artifact.id)}
-                            className="absolute bottom-0 right-0 w-5 h-5 cursor-nwse-resize z-30 group/resize"
-                            title="Drag to resize"
-                          >
-                            <div className="absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-white/30 group-hover/resize:border-cyan-400 transition-colors rounded-br-sm" />
-                          </div>
 
                           <AnimatePresence>
                           {(isCrisprActive || isAutomationActive) && (
@@ -3359,6 +4051,7 @@ function ArtifactWindowInner({
                         </AnimatePresence>,
                         document.body
                       )}
+                    <ArtifactResizeHandles artifactId={artifact.id} onResizeStart={handleDesktopResizeStart} />
                     </motion.div>
                   );
 }
@@ -3367,6 +4060,7 @@ function areArtifactWindowPropsEqual(prev, next) {
   return (
     prev.artifact === next.artifact &&
     prev.appProject === next.appProject &&
+    prev.buildJob === next.buildJob &&
     prev.isCrisprActive === next.isCrisprActive &&
     prev.crisprInput === next.crisprInput &&
     prev.isCrisprPending === next.isCrisprPending &&
@@ -3527,6 +4221,9 @@ export default function PromptVault({ content, updateContent, initialDesktopMode
   });
   const projectRulesRef = useRef(projectRules);
   const [showProjectRulesModal, setShowProjectRulesModal] = useState(false);
+  const [workspaceMemory, setWorkspaceMemory] = useState(() => normalizeWorkspaceMemory(content?.workspaceMemory || DEFAULT_WORKSPACE_MEMORY));
+  const workspaceMemoryRef = useRef(workspaceMemory);
+  const [showWorkspaceMemoryModal, setShowWorkspaceMemoryModal] = useState(false);
   const [dsCreateState, setDsCreateState] = useState(null); // { name, sourceText, sourceUrl, images, extracting, extracted, genPreset, remixBaseId }
   const [dsAiTab, setDsAiTab] = useState('generate'); // 'generate' | 'extract' | 'remix'
   const [dsViewId, setDsViewId] = useState(null); // which DS is shown in the detail panel
@@ -3687,6 +4384,7 @@ export default function PromptVault({ content, updateContent, initialDesktopMode
   const designMdRef = useRef(null); // built-in DESIGN.md tokens, fetched on mount
   useEffect(() => { projectBrandPromptRef.current = projectBrandPrompt; }, [projectBrandPrompt]);
   useEffect(() => { projectRulesRef.current = projectRules; }, [projectRules]);
+  useEffect(() => { workspaceMemoryRef.current = workspaceMemory; }, [workspaceMemory]);
   useEffect(() => { designSystemsRef.current = designSystems; }, [designSystems]);
   useEffect(() => { isCriticModeOnRef.current = isCriticModeOn; }, [isCriticModeOn]);
   useEffect(() => {
@@ -3833,6 +4531,18 @@ export default function PromptVault({ content, updateContent, initialDesktopMode
   const toggleProjectRule = useCallback((id) => {
     persistProjectRules((prev) => prev.map((rule) => rule.id === id ? { ...rule, enabled: !rule.enabled } : rule));
   }, [persistProjectRules]);
+  const persistWorkspaceMemory = useCallback((updater) => {
+    setWorkspaceMemory((prev) => {
+      const nextRaw = typeof updater === 'function' ? updater(prev) : updater;
+      const next = normalizeWorkspaceMemory({
+        ...normalizeWorkspaceMemory(nextRaw),
+        updatedAt: Date.now(),
+      });
+      workspaceMemoryRef.current = next;
+      updateContentRef.current(TQL.set('workspaceMemory', next));
+      return next;
+    });
+  }, []);
   const persistDesignSystems = useCallback((updater) => {
     setDesignSystems(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -3908,13 +4618,17 @@ export default function PromptVault({ content, updateContent, initialDesktopMode
   const buildSystemContext = useCallback(() => {
     const brand = preserveFullPromptText(projectBrandPromptRef.current || '', 'project brand prompt').trim();
     const enabledRules = (projectRulesRef.current || []).filter((rule) => rule?.enabled && rule.text?.trim()).map((rule) => rule.text.trim());
+    const memoryLines = getWorkspaceMemoryLines(workspaceMemoryRef.current || DEFAULT_WORKSPACE_MEMORY);
     const userDs = activeDesignSystemRef.current;
     // Use user's design system if set (and it isn't the built-in one),
     // otherwise fall back to the DESIGN.md built-in.
     const ds = (userDs && userDs.id !== 'design-md-builtin') ? userDs
       : (designMdRef.current || userDs);
-    if (!brand && !ds && enabledRules.length === 0) return '';
+    if (!brand && !ds && enabledRules.length === 0 && memoryLines.length === 0) return '';
     const sections = ['━━━ PROJECT CONTEXT (apply to ALL output) ━━━'];
+    if (memoryLines.length > 0) {
+      sections.push('WORKSPACE MEMORY (PERSISTENT INTENT — use this to preserve continuity):\n' + memoryLines.join('\n'));
+    }
     if (enabledRules.length > 0) {
       // Hard rules go first because they're the most actionable. Numbered to
       // make them easy to reference in critic feedback ("rule 3 violated").
@@ -4189,6 +4903,7 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const [homeTileEditPrompt, setHomeTileEditPrompt] = useState('');
   const homeTileGenAttemptedRef = useRef(false);
   const [isDesktopBgMenuOpen, setIsDesktopBgMenuOpen] = useState(false);
+  const [isDesktopModeMenuOpen, setIsDesktopModeMenuOpen] = useState(false);
   const [desktopBgInput, setDesktopBgInput] = useState('');
   const [desktopBgVideoInput, setDesktopBgVideoInput] = useState('');
   const [isGeneratingWallpaper, setIsGeneratingWallpaper] = useState(false);
@@ -4197,6 +4912,7 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const [savedWallpapers, setSavedWallpapers] = useState(() => content?.savedWallpapers || []);
   const [desktopBgTab, setDesktopBgTab] = useState('colors');
   const desktopBgMenuRef = useRef(null);
+  const desktopModeMenuRef = useRef(null);
   const desktopSettingsRef = useRef(null);
   const desktopComboRef = useRef(null);
   const [isDesktopComboOpen, setIsDesktopComboOpen] = useState(false);
@@ -4294,6 +5010,85 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const desktopAttachedImagesRef = useRef(desktopAttachedImages);
   useEffect(() => { desktopAttachedImagesRef.current = desktopAttachedImages; }, [desktopAttachedImages]);
 
+  const appendDesktopPromptContext = useCallback((text) => {
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    setDesktopInput((prev) => {
+      const base = String(prev || '').trim();
+      return base ? `${base}\n${clean}` : clean;
+    });
+  }, []);
+
+  const hasDesktopDropPayload = useCallback((event) => {
+    const types = Array.from(event?.dataTransfer?.types || []);
+    return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/plain');
+  }, []);
+
+  const handleDesktopDragEnter = useCallback((event) => {
+    if (!hasDesktopDropPayload(event)) return;
+    event.preventDefault();
+    desktopDropDepthRef.current += 1;
+    setDesktopDropActive(true);
+  }, [hasDesktopDropPayload]);
+
+  const handleDesktopDragOver = useCallback((event) => {
+    if (!hasDesktopDropPayload(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    setDesktopDropActive(true);
+  }, [hasDesktopDropPayload]);
+
+  const handleDesktopDragLeave = useCallback((event) => {
+    if (!hasDesktopDropPayload(event)) return;
+    event.preventDefault();
+    desktopDropDepthRef.current = Math.max(0, desktopDropDepthRef.current - 1);
+    if (desktopDropDepthRef.current === 0) setDesktopDropActive(false);
+  }, [hasDesktopDropPayload]);
+
+  const handleDesktopDrop = useCallback(async (event) => {
+    if (!hasDesktopDropPayload(event)) return;
+    event.preventDefault();
+    desktopDropDepthRef.current = 0;
+    setDesktopDropActive(false);
+
+    const transfer = event.dataTransfer;
+    const files = Array.from(transfer?.files || []);
+    const textDrop = (transfer?.getData('text/uri-list') || transfer?.getData('text/plain') || '').trim();
+    const imageFiles = files.filter((file) => file.type?.startsWith('image/'));
+    const otherFiles = files.filter((file) => !file.type?.startsWith('image/'));
+
+    for (const file of imageFiles.slice(0, MAX_ATTACHED_IMAGES)) {
+      await addAttachedImage(file);
+    }
+    otherFiles.slice(0, 6).forEach((file) => uploadDesktopFile(file));
+
+    const promptLines = [];
+    if (files.length > 0) {
+      const names = files.slice(0, 8).map((file) => file.name || 'untitled').join(', ');
+      promptLines.push(`Dropped materials: ${names}${files.length > 8 ? `, +${files.length - 8} more` : ''}.`);
+    }
+    if (imageFiles.length > 0) {
+      promptLines.push(`Use the ${imageFiles.length} attached image${imageFiles.length !== 1 ? 's' : ''} as visual context.`);
+    }
+    if (otherFiles.length > 0) {
+      promptLines.push(`Use the uploaded document/file context as source material.`);
+    }
+    if (textDrop) {
+      promptLines.push(`Reference link or text: ${textDrop.slice(0, 1200)}`);
+    }
+    appendDesktopPromptContext(promptLines.length
+      ? `Create something useful from this dropped context.\n${promptLines.join('\n')}`
+      : 'Create something useful from the dropped context.'
+    );
+    setTimeout(() => desktopInputRef.current?.focus(), 40);
+    toast({
+      title: 'Added to prompt',
+      description: files.length > 0
+        ? `${files.length} dropped item${files.length !== 1 ? 's' : ''} attached`
+        : 'Dropped text added as context',
+    });
+  }, [MAX_ATTACHED_IMAGES, addAttachedImage, appendDesktopPromptContext, hasDesktopDropPayload, toast, uploadDesktopFile]);
+
   // Artifact Chaining System
   const [desktopConnections, setDesktopConnections] = useState(() => content?.desktopConnections || []);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -4302,6 +5097,7 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const [pendingMerge, setPendingMerge] = useState(null);
   const [mergeInstruction, setMergeInstruction] = useState('');
   const [isStackPanelOpen, setIsStackPanelOpen] = useState(false);
+  const [showRelationshipPanel, setShowRelationshipPanel] = useState(false);
   const [stackAgentInput, setStackAgentInput] = useState('');
   const [stackAnalysisResult, setStackAnalysisResult] = useState(null);
   const [automationDraft, setAutomationDraft] = useState(null);
@@ -4309,6 +5105,8 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const [selectedStackId, setSelectedStackId] = useState(null);
   const [connectMousePos, setConnectMousePos] = useState(null);
   const desktopContainerRef = useRef(null);
+  const desktopDropDepthRef = useRef(0);
+  const [desktopDropActive, setDesktopDropActive] = useState(false);
 
   // ─── Mounted Ref ────────────────────────────────────────────────────────
   const isMountedRef = useRef(true);
@@ -4352,7 +5150,9 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const [desktopAutomationVersion, setDesktopAutomationVersion] = useState(0);
   const [showBusMonitor, setShowBusMonitor]       = useState(false);
   const [showToolsMenu, setShowToolsMenu]         = useState(false); // top-right ⋯ dropdown
+  const [showNewMenu, setShowNewMenu]             = useState(false);
   const desktopToolsMenuRef                       = useRef(null);
+  const desktopNewMenuRef                         = useRef(null);
   const [showJobCenter, setShowJobCenter]         = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [versionPanelArtifactId, setVersionPanelArtifactId] = useState(null);
@@ -4518,6 +5318,8 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
         setShowArtifactSwitcher(false);
         setShowWorkspaceSnapshots(false);
         setShowWorkspaceHealth(false);
+        setShowRelationshipPanel(false);
+        setShowNewMenu(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -5072,6 +5874,17 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
     () => generationJobs.filter(job => job.status === 'running' || job.status === 'queued').length,
     [generationJobs]
   );
+  const generationJobByArtifactId = useMemo(() => {
+    const map = new Map();
+    for (const job of generationJobs) {
+      if (!job?.artifactId) continue;
+      const existing = map.get(job.artifactId);
+      if (!existing || (job.updatedAt || job.createdAt || 0) > (existing.updatedAt || existing.createdAt || 0)) {
+        map.set(job.artifactId, job);
+      }
+    }
+    return map;
+  }, [generationJobs]);
   const appProjectByArtifactId = useMemo(() => {
     const statusRank = (status) => {
       if (status === 'building') return 3;
@@ -6580,9 +7393,10 @@ Rules:
     };
   }, [isConnecting]);
 
-  const handleDesktopResizeStart = useCallback((e, artifactId) => {
+  const handleDesktopResizeStart = useCallback((e, artifactId, corner = 'bottom-right') => {
     e.preventDefault();
     e.stopPropagation();
+    e.nativeEvent?.stopImmediatePropagation?.();
     const artifact = desktopArtifactsRef.current.find(a => a.id === artifactId);
     if (!artifact) return;
 
@@ -6593,10 +7407,13 @@ Rules:
     desktopResizeRef.current = {
       isResizing: true,
       artifactId,
+      corner,
       startX: e.clientX,
       startY: e.clientY,
-      startW: artifact.width,
-      startH: artifact.height
+      startW: artifact.width || 420,
+      startH: artifact.height || 320,
+      startLeft: artifact.x || 0,
+      startTop: Math.max(0, artifact.y || 0),
     };
 
     document.body.classList.add('desktop-resizing');
@@ -6604,22 +7421,46 @@ Rules:
     if (resizeEl) resizeEl.classList.add('is-resizing');
 
     let rafId = null;
-    let pendingW = artifact.width;
-    let pendingH = artifact.height;
+    let pendingX = desktopResizeRef.current.startLeft;
+    let pendingY = desktopResizeRef.current.startTop;
+    let pendingW = desktopResizeRef.current.startW;
+    let pendingH = desktopResizeRef.current.startH;
 
     const handleMove = (moveEvent) => {
       moveEvent.preventDefault();
       if (!desktopResizeRef.current.isResizing) return;
-      const deltaX = moveEvent.clientX - desktopResizeRef.current.startX;
-      const deltaY = moveEvent.clientY - desktopResizeRef.current.startY;
-      pendingW = Math.max(200, desktopResizeRef.current.startW + deltaX);
-      pendingH = Math.max(150, desktopResizeRef.current.startH + deltaY);
+      const resizeState = desktopResizeRef.current;
+      const deltaX = moveEvent.clientX - resizeState.startX;
+      const deltaY = moveEvent.clientY - resizeState.startY;
+      const fromLeft = resizeState.corner.includes('left');
+      const fromTop = resizeState.corner.includes('top');
+      const minW = 200;
+      const minH = 150;
+
+      pendingW = Math.max(minW, resizeState.startW + (fromLeft ? -deltaX : deltaX));
+      pendingH = Math.max(minH, resizeState.startH + (fromTop ? -deltaY : deltaY));
+      pendingX = fromLeft ? resizeState.startLeft + resizeState.startW - pendingW : resizeState.startLeft;
+      pendingY = fromTop ? resizeState.startTop + resizeState.startH - pendingH : resizeState.startTop;
+
+      if (pendingX < 0) {
+        pendingW += pendingX;
+        pendingX = 0;
+      }
+      if (pendingY < 0) {
+        pendingH += pendingY;
+        pendingY = 0;
+      }
+      pendingW = Math.max(minW, pendingW);
+      pendingH = Math.max(minH, pendingH);
+
       if (!rafId) {
         rafId = requestAnimationFrame(() => {
           rafId = null;
           if (!desktopResizeRef.current.isResizing) return;
           const el = document.querySelector(`[data-artifact-id="${desktopResizeRef.current.artifactId}"]`);
           if (el) {
+            el.style.left = pendingX + 'px';
+            el.style.top = pendingY + 'px';
             el.style.width = pendingW + 'px';
             el.style.height = pendingH + 'px';
           }
@@ -6639,14 +7480,16 @@ Rules:
       if (endEl) endEl.classList.remove('is-resizing');
       setDesktopArtifacts(current => {
         const next = current.map(a =>
-          a.id === desktopResizeRef.current.artifactId ? { ...a, width: pendingW, height: pendingH } : a
+          a.id === desktopResizeRef.current.artifactId
+            ? { ...a, x: pendingX, y: pendingY, width: pendingW, height: pendingH }
+            : a
         );
         debouncedSaveDesktopArtifacts(next);
         return next;
       });
     };
 
-    document.body.style.cursor = 'nwse-resize';
+    document.body.style.cursor = corner === 'top-right' || corner === 'bottom-left' ? 'nesw-resize' : 'nwse-resize';
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', handleMove, { passive: false });
     document.addEventListener('mouseup', handleUp);
@@ -6654,13 +7497,16 @@ Rules:
 
   // Consolidated outside-click handler for all desktop dropdowns — single listener, zero churn
   useEffect(() => {
-    const anyOpen = isDesktopBgMenuOpen || isDesktopSettingsOpen || isDesktopComboOpen ||
-                    !!desktopDropdownId || !!desktopActionsDropdownId || showToolsMenu;
+    const anyOpen = isDesktopBgMenuOpen || isDesktopModeMenuOpen || isDesktopSettingsOpen || isDesktopComboOpen ||
+                    !!desktopDropdownId || !!desktopActionsDropdownId || showToolsMenu || showNewMenu;
     if (!anyOpen) return;
 
     const handleClickOutside = (e) => {
       if (isDesktopBgMenuOpen && desktopBgMenuRef.current && !desktopBgMenuRef.current.contains(e.target)) {
         setIsDesktopBgMenuOpen(false);
+      }
+      if (isDesktopModeMenuOpen && desktopModeMenuRef.current && !desktopModeMenuRef.current.contains(e.target)) {
+        setIsDesktopModeMenuOpen(false);
       }
       if (isDesktopSettingsOpen && desktopSettingsRef.current && !desktopSettingsRef.current.contains(e.target)) {
         setIsDesktopSettingsOpen(false);
@@ -6670,6 +7516,9 @@ Rules:
       }
       if (showToolsMenu && desktopToolsMenuRef.current && !desktopToolsMenuRef.current.contains(e.target)) {
         setShowToolsMenu(false);
+      }
+      if (showNewMenu && desktopNewMenuRef.current && !desktopNewMenuRef.current.contains(e.target)) {
+        setShowNewMenu(false);
       }
       if (desktopDropdownId && !e.target.closest('.desktop-artifact-dropdown')) {
         setDesktopDropdownId(null);
@@ -6681,7 +7530,7 @@ Rules:
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isDesktopBgMenuOpen, isDesktopSettingsOpen, isDesktopComboOpen, desktopDropdownId, desktopActionsDropdownId, showToolsMenu]);
+  }, [isDesktopBgMenuOpen, isDesktopModeMenuOpen, isDesktopSettingsOpen, isDesktopComboOpen, desktopDropdownId, desktopActionsDropdownId, showToolsMenu, showNewMenu]);
 
   // Close desktop taskbar dropup on outside click
   useEffect(() => {
@@ -7411,25 +8260,26 @@ PHASE 2: SURGICAL EXECUTION (XML Blocks)
 ═══════════════════════════════════════════════════════════════
 
 <c>
-<from>
+<from><![CDATA[
 EXACT text from the HTML above — character for character including whitespace and indentation
-</from>
-<to>
+]]></from>
+<to><![CDATA[
 The COMPLETE replacement text — NO abbreviations, NO placeholders
-</to>
+]]></to>
 </c>
 
 STRUCTURAL INTEGRITY RULES (CRITICAL — violations produce broken pages):
 1. <from> MUST be an EXACT copy from the source HTML — character for character.
 2. <to> MUST be COMPLETE functional code. Can be any size (1-500+ lines).
-3. Keep <from> SHORT and UNIQUE (1-5 lines). Use opening tags or unique identifiers as anchors.
-4. NEVER partially replace an HTML element. If <from> opens a tag, <to> MUST close it.
-5. Before writing EVERY <to> block: count every <div>, <section>, <style>, <script> you opened. Verify each has a matching closing tag.
-6. A broken <script> tag destroys ALL interactivity. A broken <style> tag destroys ALL styling. Treat them as atomic — replace the ENTIRE block or don't touch it.
-7. NEVER output the entire HTML document — only the specific parts that change.
-8. PRESERVE all existing onclick, data-*, event handlers, and styles not related to the request.
-9. When replacing a <style> block, output the COMPLETE <style>...</style> block — never leave orphaned CSS.
-10. Do NOT duplicate content. If you replace a section, the replacement must NOT include content that already exists elsewhere.
+3. Prefer CDATA exactly as shown so HTML/CSS/JS characters are preserved.
+4. Keep <from> SHORT and UNIQUE (1-5 lines). Use opening tags or unique identifiers as anchors.
+5. NEVER partially replace an HTML element. If <from> opens a tag, <to> MUST close it.
+6. Before writing EVERY <to> block: count every <div>, <section>, <style>, <script> you opened. Verify each has a matching closing tag.
+7. A broken <script> tag destroys ALL interactivity. A broken <style> tag destroys ALL styling. Treat them as atomic — replace the ENTIRE block or don't touch it.
+8. NEVER output the entire HTML document — only the specific parts that change.
+9. PRESERVE all existing onclick, data-*, event handlers, and styles not related to the request.
+10. When replacing a <style> block, output the COMPLETE <style>...</style> block — never leave orphaned CSS.
+11. Do NOT duplicate content. If you replace a section, the replacement must NOT include content that already exists elsewhere.
 
 OUTPUT: Brief analysis text, then all <c> blocks. No JSON. No markdown fences around the blocks.`;
 
@@ -7442,10 +8292,11 @@ USER REQUEST: "${safeHtmlInstruction}"
 ${safeHtmlAssetContext}
 
 OUTPUT FORMAT — start your response with the first <c> block, no preamble:
-<c><from>exact short anchor copied from the HTML above</from><to>complete replacement (any length)</to></c>
+<c><from><![CDATA[exact short anchor copied from the HTML above]]></from><to><![CDATA[complete replacement (any length)]]></to></c>
 
 CONSTRAINTS (violations produce broken pages):
 - <from> is an EXACT copy from the HTML above (1-5 lines, unique anchor — opening tag or unique id)
+- Prefer CDATA exactly as shown so HTML/CSS/JS characters are preserved
 - <to> is COMPLETE balanced HTML/CSS/JS — never partial, never abbreviated, never "// same as before"
 - Never partially replace an element: if <from> opens a tag, <to> must close it
 - <script> and <style> blocks are atomic — replace the entire block or leave it alone
@@ -7468,35 +8319,21 @@ Begin output now with the first <c> block.`;
           return;
         }
 
-        let blocks = parseCrisprBlocks(result) || [];
+        let blocks = parseHtmlPatchBlocksFromResponse(result);
         addDebugLog('info', `[Desktop CRISPR] Parsed ${blocks.length} blocks from AI response`, {
           rawResponse: result.substring(0, 2000) + (result.length > 2000 ? '...' : ''),
           blocksPreview: blocks.map(b => ({ find: b.find?.substring(0, 200), replace: b.replace?.substring(0, 200) }))
         });
-        
-        if (blocks.length === 0) {
-          const xmlParsed = parseXmlChanges(result);
-          if (xmlParsed && xmlParsed.changes && Array.isArray(xmlParsed.changes) && xmlParsed.changes.length > 0) {
-            blocks = xmlParsed.changes.filter(c => c && typeof c.find === 'string' && c.find.length > 0 && typeof c.replace === 'string');
-          }
-        }
-
-        if (blocks.length === 0) {
-          const jsonParsed = parseFindReplaceOperations(result);
-          if (jsonParsed.success && jsonParsed.operations.length > 0) {
-            blocks = jsonParsed.operations;
-          }
-        }
 
         let crisprSucceeded = false;
         let finalContent = currentContent;
         let successCount = 0;
-
-        // Track whether patches structurally broke the page — drives the rewrite fallback.
-        let validationRejected = false;
+        let lastApplyResult = null;
+        let patchFailureReason = blocks.length === 0 ? 'No XML patch blocks parsed from the model response.' : '';
 
         if (blocks.length > 0) {
           const applyResult = applyCrisprPatches(currentContent, blocks);
+          lastApplyResult = applyResult;
           successCount = applyResult.results.filter(r => r.success).length;
 
           if (successCount > 0) {
@@ -7546,14 +8383,122 @@ Begin output now with the first <c> block.`;
               // Patches parsed and matched, but the result would render broken.
               // Discard them and fall through to the full-rewrite fallback below.
               finalContent = currentContent;
-              validationRejected = true;
+              patchFailureReason = 'The XML patches matched but produced invalid HTML structure.';
               addDebugLog('warning', '[Desktop CRISPR] Patches rejected by validation — falling back to full rewrite');
             }
           } else {
+            patchFailureReason = `${blocks.length} XML patch block${blocks.length > 1 ? 's' : ''} parsed, but none matched the current HTML.`;
             addDebugLog('warning', `[Desktop CRISPR] ${blocks.length} blocks found but none matched. First pattern: "${blocks[0]?.find?.substring(0, 60) || 'empty'}..."`);
           }
         } else {
           addDebugLog('warning', '[Desktop CRISPR] No CRISPR blocks parsed from AI response. Falling back.');
+        }
+
+        // ── Corrective XML retry ────────────────────────────────────────────
+        // Before doing a full rewrite, give the model one constrained chance to
+        // fix only the patch blocks. This preserves the surgical path for the
+        // common failure mode: the model chose a slightly wrong <from> anchor.
+        if (!crisprSucceeded && !stopToken.cancelled) {
+          try {
+            setDesktopCrisprStatus(prev => ({ ...prev, [artifactId]: { status: 'pending', lastInstruction: 'Repairing XML patch anchors...' } }));
+            const diagnostics = lastApplyResult ? summarizePatchResults(lastApplyResult) : patchFailureReason;
+            const repairPromptText = `${htmlSystemContext}The previous XML find/replace patch response did NOT apply cleanly. Produce corrected surgical XML patches against the CURRENT HTML only.
+
+USER REQUEST:
+${safeHtmlInstruction}
+${safeHtmlAssetContext}
+
+FAILURE:
+${patchFailureReason || 'Patch response did not produce a valid updated document.'}
+
+PATCH DIAGNOSTICS:
+${diagnostics}
+
+PREVIOUS MODEL RESPONSE (for context only, do not copy bad anchors):
+${preserveFullPromptText(result || '', 'previous patch response')}
+
+CURRENT HTML (copy <from> anchors exactly from this source):
+${contentForPrompt}
+
+Return corrected XML blocks ONLY. No prose, no markdown fences, no JSON.
+Use CDATA exactly as shown:
+<c>
+<from><![CDATA[
+exact short unique source text copied from CURRENT HTML
+]]></from>
+<to><![CDATA[
+complete replacement with balanced HTML/CSS/JS
+]]></to>
+</c>
+
+Rules:
+- Emit 1-4 high-confidence patches, not a full rewrite.
+- Each <from> must be a unique exact substring from CURRENT HTML.
+- Prefer replacing complete elements, complete sections, or complete <style>/<script> blocks.
+- Never partially replace <style> or <script>; they are atomic.
+- Preserve unrelated handlers, data-* attributes, and existing working JavaScript.
+
+Begin with the first <c> block.`;
+
+            addDebugLog('api', '[Desktop CRISPR] Requesting corrective XML patch retry...', {
+              promptPreview: repairPromptText.substring(0, 1000) + '...',
+              promptLength: repairPromptText.length
+            });
+
+            const repairResult = await aiApi.generate({ prompt: repairPromptText, preservePrompt: true });
+            const repairBlocks = parseHtmlPatchBlocksFromResponse(repairResult);
+            addDebugLog('info', `[Desktop CRISPR] Corrective retry parsed ${repairBlocks.length} blocks`, {
+              rawResponse: repairResult?.substring(0, 1600) + (repairResult?.length > 1600 ? '...' : '')
+            });
+
+            if (repairBlocks.length > 0) {
+              const repairApplyResult = applyCrisprPatches(currentContent, repairBlocks);
+              lastApplyResult = repairApplyResult;
+              const repairSuccessCount = repairApplyResult.results.filter(r => r.success).length;
+
+              if (repairSuccessCount > 0) {
+                let repairedContent = repairApplyResult.html;
+                let repairValidationPassed = true;
+                if (isFullDocument) {
+                  repairedContent = sanitizeHtmlOutput(repairedContent);
+                  const validation = validateHtmlStructure(repairedContent);
+                  const tagBalance = checkHtmlTagBalance(repairedContent);
+                  if (!validation.valid && !tagBalance.warningsOnly) {
+                    repairValidationPassed = false;
+                    patchFailureReason = `Corrective retry produced invalid HTML: ${validation.error || (tagBalance.issues || []).slice(0, 2).join('; ')}`;
+                  } else if (!tagBalance.balanced && !tagBalance.warningsOnly) {
+                    repairValidationPassed = false;
+                    patchFailureReason = `Corrective retry broke tag balance: ${(tagBalance.issues || []).slice(0, 2).join('; ')}`;
+                  }
+                }
+
+                if (repairValidationPassed) {
+                  repairedContent = prettifyHtml(repairedContent);
+                  const finalDataUrls = replaceDataUrlPlaceholders(repairedContent);
+                  if (finalDataUrls.changed) repairedContent = finalDataUrls.value;
+                  updateArtifactWithHistory(artifactId, { content: repairedContent });
+                  toast({ title: "CRISPR Applied", description: `${repairSuccessCount}/${repairBlocks.length} repaired patches applied${isFullDocument ? ' (validated)' : ''}` });
+                  setDesktopCrisprIds(prev => { const next = new Set(prev); next.delete(artifactId); return next; });
+                  setDesktopCrisprInputs(prev => { const next = { ...prev }; delete next[artifactId]; return next; });
+                  crisprSucceeded = true;
+                  successCount = repairSuccessCount;
+                  addDebugLog('success', `[Desktop CRISPR] Corrective retry applied ${repairSuccessCount}/${repairBlocks.length} patches`, {
+                    patchResults: repairApplyResult.results.map(r => ({ success: r.success, matchType: r.matchType, error: r.error, desc: r.description }))
+                  });
+                } else {
+                  addDebugLog('warning', `[Desktop CRISPR] Corrective retry rejected: ${patchFailureReason}`);
+                }
+              } else {
+                patchFailureReason = `${repairBlocks.length} corrected patch block${repairBlocks.length > 1 ? 's' : ''} parsed, but none matched.`;
+                addDebugLog('warning', `[Desktop CRISPR] Corrective retry did not match: ${summarizePatchResults(repairApplyResult)}`);
+              }
+            } else {
+              patchFailureReason = 'Corrective retry did not return usable XML patch blocks.';
+              addDebugLog('warning', '[Desktop CRISPR] Corrective retry returned no usable blocks');
+            }
+          } catch (repairErr) {
+            addDebugLog('warning', `[Desktop CRISPR] Corrective retry failed: ${repairErr?.message || 'Unknown error'}`);
+          }
         }
 
         // ── Full-rewrite fallback ─────────────────────────────────────────────
@@ -7660,7 +8605,7 @@ CRITICAL RULES:
         return prev;
       });
     }
-  }, [toast, persistDesktopArtifacts, updateArtifactWithHistory]);
+  }, [toast, updateArtifactWithHistory, addDebugLog, appSettings.crisprMode, appSettings.defaultSonarModel]);
 
   const handleReactAutoFix = useCallback(async (artifactId, options = {}) => {
     if (desktopCrisprPendingIdsRef.current.has(artifactId)) return;
@@ -7775,7 +8720,7 @@ Platform: single \`function App({ content, updateContent })\`, no imports/export
 
   // ─── Auto-Improve Handler ───────────────────────────────────────────────
   const handleDesktopAutoImprove = useCallback(async (artifactId, customIterations, options = {}) => {
-    const { customInstruction = '' } = options || {};
+    const { customInstruction = '', enableWebResearch = false } = options || {};
     const trimmedCustomInstruction = String(customInstruction || '').trim();
     const artifact = desktopArtifactsRef.current.find(a => a.id === artifactId);
     if (!artifact || !artifact.content || artifact.type === 'image' || artifact.type === 'video') return;
@@ -7795,6 +8740,37 @@ Platform: single \`function App({ content, updateContent })\`, no imports/export
     let successTotal = 0;
 
     addDebugLog('info', `[Desktop Auto] Starting ${totalIterations} autonomous iterations on "${artifact.title}"`, { artifactId, isThinklet: artifact.language === 'react' });
+
+    let autoResearchContext = '';
+    if (enableWebResearch) {
+      const researchQuery = trimmedCustomInstruction || artifact.title || 'Improve this web artifact with current, realistic product content and design details';
+      setDesktopCrisprStatus(prev => ({ ...prev, [artifactId]: { status: 'pending', lastInstruction: 'Researching context for auto-improve...' } }));
+      try {
+        const recommendedModel = selectSearchModel({
+          purpose: 'deep-research',
+          query: researchQuery,
+          phase: 'desktop-auto-improve-research',
+          fastMode: false
+        }, appSettings.defaultSonarModel);
+        const researchResult = await retryWithBackoff(
+          () => aiApi.generate({
+            prompt: `TODAY'S DATE: ${getCurrentDateString()} (year: ${new Date().getFullYear()}). Research this artifact improvement request: "${researchQuery}". Extract specific current facts, product/category details, UX patterns, names, metrics, dates, and concrete content that could make the artifact more realistic. Keep it concise but specific.`,
+            model: recommendedModel,
+            max_tokens: 5000,
+            signal: abortController.signal,
+            preservePrompt: true
+          }),
+          { maxRetries: 2, baseDelay: 2000 }
+        );
+        if (researchResult && typeof researchResult === 'string' && researchResult.trim().length > 50) {
+          autoResearchContext = `\n\nLIVE RESEARCH CONTEXT (use only where it improves realism; do not fabricate beyond it):\nToday's Date: ${getCurrentDateString()}\nSearch: "${preserveFullPromptText(researchQuery, 'auto-improve research query')}"\n\n${preserveFullPromptText(researchResult, 'auto-improve research result')}\n`;
+          addDebugLog('success', `[Desktop Auto] Web research context ready: ${researchResult.length} chars`);
+        }
+      } catch (researchErr) {
+        if (researchErr?.name === 'AbortError') throw researchErr;
+        addDebugLog('warning', `[Desktop Auto] Web research failed: ${researchErr?.message || 'Unknown error'}. Continuing without research context.`);
+      }
+    }
 
     // ── Thinklet (React) auto-improve — CRISPR find/replace per pass ────────
     // Each pass asks the AI for surgical <c><lines>N-M</lines><to>...</to></c> blocks
@@ -7826,6 +8802,7 @@ Platform: single \`function App({ content, updateContent })\`, no imports/export
           const userInstructionLine = trimmedCustomInstruction
             ? `USER INSTRUCTION (priority — this is what they actually asked for): "${preserveFullPromptText(trimmedCustomInstruction, 'user instruction')}"\n`
             : '';
+          const researchContextLine = autoResearchContext ? `${autoResearchContext}\n` : '';
 
           const srcLines = currentContent.split('\n');
           const displaySource = preserveFullPromptText(currentContent, 'current Thinklet code');
@@ -7834,7 +8811,7 @@ Platform: single \`function App({ content, updateContent })\`, no imports/export
             .join('\n');
 
           const fastImprovePrompt = `${SYS_CTX}Improve this React Thinklet. Pass ${i}/${totalIterations} — focus: ${iterFocus}.
-${previousWork}${userInstructionLine}
+${previousWork}${userInstructionLine}${researchContextLine}
 CODE:
 ${numberedCode}
 
@@ -7847,7 +8824,7 @@ Single-line insertion: <lines>N</lines>. Multiple regions: multiple blocks.
 Platform: single \`function App({ content, updateContent })\`, no imports/exports, Tailwind only, globals available (React, motion, AnimatePresence, TQL, aiApi, composioApi, useMutation, useToast, MarkdownRenderer, debounce, generateId, desktopBus, Lucide *Icon names). Persist with \`updateContent(TQL.set/push/pull/batch)\`. Never touch line 1, the \`return (\` line, the outermost JSX line, or the final \`}\`.`;
 
           const extendedImprovePrompt = `${SYS_CTX}You're improving this React Thinklet. Pass ${i}/${totalIterations} — focus: ${iterFocus}.
-${previousWork}${userInstructionLine}
+${previousWork}${userInstructionLine}${researchContextLine}
 CODE:
 ${numberedCode}
 
@@ -7970,48 +8947,84 @@ Platform: single \`function App({ content, updateContent })\`, no imports/export
         const contentForPrompt = preserveFullPromptText(currentContent, 'current HTML');
 
         const isFullDocument = currentContent.includes('<!DOCTYPE') || currentContent.includes('<html');
+        const iterFocuses = [
+          'Audit structure, hierarchy, spacing, and missing sections',
+          'Elevate typography, color, shadows, depth, and component polish',
+          'Improve hover states, transitions, animation timing, and interaction feedback',
+          'Increase content realism with useful labels, data, badges, and states',
+          'Final accessibility, responsiveness, edge cases, and micro-polish',
+        ];
+        const iterFocus = iterFocuses[i - 1] || 'Apply the highest-impact remaining improvement';
+        const userInstructionBlock = trimmedCustomInstruction
+          ? `\nUSER INSTRUCTION (highest priority):\n${preserveFullPromptText(trimmedCustomInstruction, 'auto-improve user instruction')}\n`
+          : '';
+        const researchBlock = autoResearchContext ? `${autoResearchContext}\n` : '';
+        const xmlPatchTemplate = `<c>
+<from><![CDATA[
+exact short unique source text copied from CURRENT HTML
+]]></from>
+<to><![CDATA[
+complete replacement with balanced HTML/CSS/JS
+]]></to>
+</c>`;
 
-        const autoPromptText = `${buildSystemContextRef.current?.() || ''}You are a senior full-stack developer and designer who was HIRED to make this web artifact significantly better. This is iteration ${i} of ${totalIterations}.
+        const extendedAutoPromptText = `${buildSystemContextRef.current?.() || ''}You are a senior full-stack developer and product designer improving this HTML artifact. This is iteration ${i} of ${totalIterations}.
 
-YOUR MISSION — Act as a hired creative developer. Every iteration must produce VISIBLE, MEANINGFUL improvements:
-- Iteration 1: Audit structure. Add missing sections, improve layout, fix spacing issues.
-- Iteration 2: Visual polish. Typography hierarchy, shadows, gradients, color refinement.
-- Iteration 3: Interactivity. Hover states, transitions, animations, smooth scroll.
-- Iteration 4: Content density. Add realistic data, icons, badges, status indicators.
-- Iteration 5: Final polish. Micro-interactions, accessibility, edge case handling.
-
-You are on iteration ${i}. Focus on that phase but also fix anything broken from previous passes.
-
-RULES:
-1. Make BOLD, substantive changes — not just color tweaks
-2. Each iteration should make the page noticeably more impressive
-3. Preserve ALL existing JavaScript, onclick handlers, data-* attributes
-4. If you add new interactive elements, include the JavaScript for them
-5. The result should look like a professional shipped product
-6. When replacing an HTML element, NEVER break tag nesting — count every opening tag and ensure it has a matching closing tag in your <to> block
-7. NEVER replace a <style> or <script> block partially — replace the ENTIRE block or leave it alone
+ITERATION FOCUS:
+${iterFocus}
+${userInstructionBlock}${researchBlock}
+MISSION:
+- Make visible, meaningful improvements a user can immediately notice.
+- Prefer a few complete, high-confidence replacements over many fragile tiny edits.
+- Preserve the artifact's working behavior unless the user explicitly asked to change it.
 
 CURRENT HTML:
 ${contentForPrompt}
 
-Output surgical <c> blocks. Your response MUST contain <c> blocks with <from> and <to> sub-tags.
+Briefly audit the best changes to make (1-3 sentences), then output surgical XML patch blocks.
 
-<c>
-<from>EXACT text from the HTML above — character for character</from>
-<to>Complete replacement — NO abbreviations, NO placeholders</to>
-</c>
+${xmlPatchTemplate}
 
-Keep <from> SHORT and UNIQUE (1-5 lines). <to> can be any size.
-Generate 5-15 targeted changes for this iteration.
+PATCH RULES:
+- Emit 2-6 high-confidence patches for this iteration.
+- <from> must be an exact, unique substring copied character-for-character from CURRENT HTML.
+- Keep <from> short when possible (1-8 lines), but use a complete element/section/style/script block when that is safer.
+- <to> must be complete, balanced HTML/CSS/JS. No placeholders, no ellipses, no "// same as before".
+- Never partially replace <style> or <script>; replace the entire block or leave it alone.
+- Preserve unrelated onclick handlers, data-* attributes, event listeners, and working JavaScript.
+- Do not output the full document unless the current HTML itself is only the region being edited.
+- Use CDATA as shown so HTML/CSS/JS characters are preserved.
 
-CRITICAL OUTPUT FORMAT RULES:
-- Do NOT wrap your response in a JSON object like {"response": "..."} — output raw text with <c> blocks directly
-- Do NOT use markdown fences around the <c> blocks
-- Start with 1-3 sentences of thinking, then output <c> blocks IMMEDIATELY
-- Every <c> block MUST have <from>...</from> and <to>...</to> sub-tags
-- The <from> content must be an EXACT character-for-character copy from the HTML above
+CRITICAL OUTPUT FORMAT:
+- No JSON.
+- No markdown fences.
+- Analysis may come first, but every actual patch must use <c><from>...</from><to>...</to></c>.
 
 Go:`;
+
+        const fastAutoPromptText = `${buildSystemContextRef.current?.() || ''}Improve this HTML artifact. Output corrected XML patch blocks ONLY. No prose, no markdown fences, no JSON.
+
+ITERATION ${i}/${totalIterations} FOCUS:
+${iterFocus}
+${userInstructionBlock}${researchBlock}
+CURRENT HTML:
+${contentForPrompt}
+
+Use this exact patch format:
+${xmlPatchTemplate}
+
+Rules:
+- Emit 2-6 high-confidence patches.
+- <from> must be an exact, unique substring copied character-for-character from CURRENT HTML.
+- Prefer complete elements/sections or whole <style>/<script> blocks over fragile partial edits.
+- <to> must be complete balanced HTML/CSS/JS. No placeholders, no ellipses, no "// same as before".
+- Never partially replace <style> or <script>; they are atomic.
+- Preserve unrelated onclick handlers, data-* attributes, event listeners, and working JavaScript.
+- Do not output the full document unless the current HTML itself is only the region being edited.
+
+Begin with the first <c> block.`;
+
+        const autoPromptText = appSettings.crisprMode === 'fast' ? fastAutoPromptText : extendedAutoPromptText;
 
         addDebugLog('api', `[Desktop Auto] Iteration ${i}/${totalIterations}: Requesting AI improvements...`, {
           promptPreview: autoPromptText.substring(0, 1000) + '...',
@@ -8023,37 +9036,24 @@ Go:`;
           { maxRetries: 2, baseDelay: 1500 }
         );
 
-        let blocks = parseCrisprBlocks(result);
+        let blocks = parseHtmlPatchBlocksFromResponse(result);
         addDebugLog('info', `[Desktop Auto] Iteration ${i}: Parsed ${blocks?.length || 0} blocks`, {
           rawResponse: result?.substring(0, 2000) + (result?.length > 2000 ? '...' : ''),
           blocksPreview: blocks?.map(b => ({ find: b.find?.substring(0, 100), replace: b.replace?.substring(0, 100) }))
         });
 
-        if (!blocks || blocks.length === 0) {
-          const xmlParsed = parseXmlChanges(result);
-          if (xmlParsed && xmlParsed.changes && Array.isArray(xmlParsed.changes) && xmlParsed.changes.length > 0) {
-            blocks = xmlParsed.changes.filter(c => c && typeof c.find === 'string' && c.find.length > 0 && typeof c.replace === 'string');
-            if (blocks.length > 0) {
-              addAgentLog(artifactId, 'info', `[Desktop Auto] Iteration ${i}: Recovered ${blocks.length} blocks via XML parser fallback`);
-            }
-          }
-        }
+        let iterationApplied = false;
+        let iterationApplyResult = null;
+        let iterationFailureReason = '';
 
         if (!blocks || blocks.length === 0) {
-          const jsonParsed = parseFindReplaceOperations(result);
-          if (jsonParsed.success && jsonParsed.operations.length > 0) {
-            blocks = jsonParsed.operations;
-            addAgentLog(artifactId, 'info', `[Desktop Auto] Iteration ${i}: Recovered ${blocks.length} blocks via JSON parser fallback`);
-          }
-        }
-
-        if (!blocks || blocks.length === 0) {
-          addDebugLog('warning', `[Desktop Auto] Iteration ${i}: No blocks parsed from any parser (response length: ${result?.length || 0}, starts with: ${result?.substring(0, 80)})`);
-          continue;
+          iterationFailureReason = `No XML patch blocks parsed from model response (response length: ${result?.length || 0}).`;
+          addDebugLog('warning', `[Desktop Auto] Iteration ${i}: ${iterationFailureReason} Starts with: ${result?.substring(0, 80)}`);
         }
 
         if (blocks.length > 0) {
           const applyResult = applyCrisprPatches(currentContent, blocks);
+          iterationApplyResult = applyResult;
           const successCount = applyResult.results.filter(r => r.success).length;
           if (successCount > 0) {
             let finalContent = applyResult.html;
@@ -8068,12 +9068,14 @@ Go:`;
                   addDebugLog('info', `[Desktop Auto] Iteration ${i}: Tag balance has minor warnings only — accepting changes`);
                 } else {
                   addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Structural validation failed, skipping. Issues: ${(tagBalance.issues || []).slice(0, 2).join('; ')}`);
+                  iterationFailureReason = `Structural validation failed: ${(tagBalance.issues || []).slice(0, 2).join('; ')}`;
                   validationPassed = false;
                 }
               } else {
                 const tagBalance = checkHtmlTagBalance(finalContent);
                 if (!tagBalance.balanced && !tagBalance.warningsOnly) {
                   addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Tag balance severely broken (${(tagBalance.issues || []).slice(0, 2).join('; ')}), skipping`);
+                  iterationFailureReason = `Tag balance broke: ${(tagBalance.issues || []).slice(0, 2).join('; ')}`;
                   validationPassed = false;
                 } else if (tagBalance.warningsOnly) {
                   addDebugLog('info', `[Desktop Auto] Iteration ${i}: Minor tag warnings (non-blocking): ${(tagBalance.issues || []).slice(0, 2).join('; ')}`);
@@ -8097,22 +9099,136 @@ Go:`;
                   currentContent = finalContent;
                   updateArtifactWithHistory(artifactId, { content: finalContent });
                   successTotal += successCount;
+                  iterationApplied = true;
                   addDebugLog('success', `[Desktop Auto] Iteration ${i}/${totalIterations}: ${successCount} patches applied (critic score ${score})`);
                 } else {
+                  iterationFailureReason = `Design critic rejected iteration (score ${score}).`;
                   addDebugLog('warning', `[Desktop Auto] Iteration ${i}: rejected by critic (score ${score}). Issues: ${(critique?.issues || []).slice(0, 2).join('; ')}`);
                 }
               } else {
                 currentContent = finalContent;
                 updateArtifactWithHistory(artifactId, { content: finalContent });
                 successTotal += successCount;
+                iterationApplied = true;
                 addDebugLog('success', `[Desktop Auto] Iteration ${i}/${totalIterations}: ${successCount} patches applied`);
               }
             }
           } else {
+            iterationFailureReason = `${blocks.length} XML patch block${blocks.length > 1 ? 's' : ''} parsed, but none matched the current HTML.`;
             addDebugLog('warning', `[Desktop Auto] ⚡ Iteration ${i}: ${blocks.length} blocks found but none matched. First pattern: "${blocks[0]?.find?.substring(0, 60) || 'empty'}..."`);
           }
         } else {
           addDebugLog('warning', `[Desktop Auto] Iteration ${i}: No blocks parsed`);
+        }
+
+        if (!iterationApplied && !stopToken.cancelled) {
+          try {
+            const diagnostics = iterationApplyResult ? summarizePatchResults(iterationApplyResult) : iterationFailureReason;
+            const repairPromptText = `${buildSystemContextRef.current?.() || ''}The previous auto-improve XML patches did not apply cleanly. Return corrected XML patches against the CURRENT HTML only.
+
+ITERATION ${i}/${totalIterations} FOCUS:
+${iterFocus}
+${userInstructionBlock}${researchBlock}
+FAILURE:
+${iterationFailureReason || 'The previous patch response did not produce a valid applied update.'}
+
+PATCH DIAGNOSTICS:
+${diagnostics}
+
+PREVIOUS MODEL RESPONSE (context only; do not copy bad anchors):
+${preserveFullPromptText(result || '', 'previous auto-improve response')}
+
+CURRENT HTML:
+${contentForPrompt}
+
+Return corrected XML blocks ONLY. No prose, no markdown fences, no JSON.
+Use this exact format:
+${xmlPatchTemplate}
+
+Rules:
+- Emit 1-4 high-confidence patches.
+- Every <from> must be an exact, unique substring copied from CURRENT HTML.
+- Prefer complete elements/sections or whole <style>/<script> blocks.
+- Never partially replace <style> or <script>; they are atomic.
+- Preserve unrelated handlers, data-* attributes, event listeners, and working JavaScript.
+- <to> must be complete balanced HTML/CSS/JS.
+
+Begin with the first <c> block.`;
+
+            addDebugLog('api', `[Desktop Auto] Iteration ${i}: Requesting corrective XML retry...`, {
+              promptPreview: repairPromptText.substring(0, 1000) + '...',
+              promptLength: repairPromptText.length
+            });
+
+            const repairResult = await retryWithBackoff(
+              () => aiApi.generate({ prompt: repairPromptText, signal: abortController.signal, preservePrompt: true }),
+              { maxRetries: 1, baseDelay: 1000 }
+            );
+
+            const repairBlocks = parseHtmlPatchBlocksFromResponse(repairResult);
+            addDebugLog('info', `[Desktop Auto] Iteration ${i}: Corrective retry parsed ${repairBlocks.length} blocks`, {
+              rawResponse: repairResult?.substring(0, 1600) + (repairResult?.length > 1600 ? '...' : '')
+            });
+
+            if (repairBlocks.length > 0) {
+              const repairApplyResult = applyCrisprPatches(currentContent, repairBlocks);
+              const repairSuccessCount = repairApplyResult.results.filter(r => r.success).length;
+
+              if (repairSuccessCount > 0) {
+                let repairedContent = repairApplyResult.html;
+                let repairValidationPassed = true;
+                if (isFullDocument) {
+                  repairedContent = sanitizeHtmlOutput(repairedContent);
+                  const validation = validateHtmlStructure(repairedContent);
+                  const tagBalance = checkHtmlTagBalance(repairedContent);
+                  if (!validation.valid && !tagBalance.warningsOnly) {
+                    repairValidationPassed = false;
+                    addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Corrective retry invalid HTML (${validation.error || 'unknown'})`);
+                  } else if (!tagBalance.balanced && !tagBalance.warningsOnly) {
+                    repairValidationPassed = false;
+                    addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Corrective retry broke tag balance (${(tagBalance.issues || []).slice(0, 2).join('; ')})`);
+                  } else if (tagBalance.warningsOnly) {
+                    addDebugLog('info', `[Desktop Auto] Iteration ${i}: Corrective retry tag warnings only: ${(tagBalance.issues || []).slice(0, 2).join('; ')}`);
+                  }
+                }
+
+                if (repairValidationPassed) {
+                  if (isCriticModeOnRef.current) {
+                    setDesktopCrisprStatus(prev => ({ ...prev, [artifactId]: { status: 'pending', lastInstruction: `Critiquing repaired iteration ${i}/${totalIterations}…` } }));
+                    const critique = await runDesignCriticRef.current({
+                      before: currentContent,
+                      after: repairedContent,
+                      isThinklet: false,
+                      focus: `repaired iteration ${i} of ${totalIterations}`,
+                    });
+                    const score = Number(critique?.score) || 0;
+                    const keep = critique?.shouldKeep !== false && score >= 6;
+                    addDebugLog(keep ? 'success' : 'warning', `[Desktop Critic] Repaired iteration ${i}: score=${score} keep=${keep}`, critique);
+                    if (keep) {
+                      currentContent = repairedContent;
+                      updateArtifactWithHistory(artifactId, { content: repairedContent });
+                      successTotal += repairSuccessCount;
+                      iterationApplied = true;
+                      addDebugLog('success', `[Desktop Auto] Iteration ${i}/${totalIterations}: corrective retry applied ${repairSuccessCount} patches (critic score ${score})`);
+                    }
+                  } else {
+                    currentContent = repairedContent;
+                    updateArtifactWithHistory(artifactId, { content: repairedContent });
+                    successTotal += repairSuccessCount;
+                    iterationApplied = true;
+                    addDebugLog('success', `[Desktop Auto] Iteration ${i}/${totalIterations}: corrective retry applied ${repairSuccessCount} patches`);
+                  }
+                }
+              } else {
+                addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Corrective retry blocks still did not match. ${summarizePatchResults(repairApplyResult)}`);
+              }
+            } else {
+              addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Corrective retry returned no usable XML blocks`);
+            }
+          } catch (repairErr) {
+            if (repairErr?.name === 'AbortError') throw repairErr;
+            addDebugLog('warning', `[Desktop Auto] Iteration ${i}: Corrective retry failed: ${repairErr?.message || 'Unknown error'}`);
+          }
         }
       } catch (err) {
         addDebugLog('warning', `[Desktop Auto] ⚡ Iteration ${i} error: ${err?.message || 'Unknown'}. Continuing...`);
@@ -8130,7 +9246,7 @@ Go:`;
     if (isMountedRef.current && !stopToken.cancelled) {
       toast({ title: "⚡ Auto-Improve Complete!", description: `${successTotal} total changes applied across ${totalIterations} iterations` });
     }
-  }, [persistDesktopArtifacts, toast, addDebugLog, updateArtifactWithHistory, appSettings.crisprMode]);
+  }, [toast, addDebugLog, updateArtifactWithHistory, appSettings.crisprMode, appSettings.defaultSonarModel]);
 
   const handleDesktopAutoImproveRef = useRef(null);
   useEffect(() => { handleDesktopAutoImproveRef.current = handleDesktopAutoImprove; }, [handleDesktopAutoImprove]);
@@ -11249,6 +12365,79 @@ When laying out the page, build sections in the order suggested by the roles (he
   // always holds the latest version of handleDesktopSubmit
   useEffect(() => { handleDesktopSubmitRef.current = handleDesktopSubmit; }, [handleDesktopSubmit]);
 
+  const desktopNewStarters = useMemo(() => [
+    {
+      id: 'blank-html',
+      label: 'HTML Artifact',
+      detail: 'A polished single-file page or tool',
+      Icon: LayoutIcon,
+      tone: 'from-cyan-400 to-blue-500',
+      prompt: 'Create a refined, production-quality HTML artifact with an elegant responsive interface. Ask no follow-up questions; make thoughtful assumptions and include useful interactions.',
+      options: { forceStandard: true },
+    },
+    {
+      id: 'thinklet-app',
+      label: 'Thinklet App',
+      detail: 'A React micro-app with state and controls',
+      Icon: ComponentIcon,
+      tone: 'from-violet-400 to-fuchsia-500',
+      prompt: 'Build a useful Thinklet app with a polished interface, meaningful state, and ergonomic controls. Make it feel complete and immediately usable.',
+      beforeRun: () => {
+        setIsDesktopThinkletModeOn(true);
+        isDesktopThinkletModeOnRef.current = true;
+        updateContentRef.current(TQL.set('isDesktopThinkletModeOn', true));
+      },
+    },
+    {
+      id: 'automation-workflow',
+      label: 'Automation Workflow',
+      detail: 'Runnable agents, edges, and live status',
+      Icon: NetworkIcon,
+      tone: 'from-emerald-400 to-teal-500',
+      prompt: 'Create a practical automation workflow that researches an input, transforms it into a structured plan, and produces a final output with clear handoffs between agents.',
+      beforeRun: () => {
+        setIsDesktopAutomationModeOn(true);
+        isDesktopAutomationModeOnRef.current = true;
+        updateContentRef.current(TQL.set('isDesktopAutomationModeOn', true));
+      },
+    },
+    {
+      id: 'research-board',
+      label: 'Research Board',
+      detail: 'Live-feeling source brief and dashboard',
+      Icon: SearchIcon,
+      tone: 'from-sky-400 to-cyan-400',
+      prompt: 'Research a timely topic, synthesize the findings, and build a crisp decision dashboard with source-backed cards, patterns, risks, and recommended next actions.',
+    },
+    {
+      id: 'image-studio',
+      label: 'Image Studio',
+      detail: 'Generate assets and compose them',
+      Icon: ImageIcon,
+      tone: 'from-rose-400 to-amber-400',
+      prompt: 'Generate a small set of high-quality visual assets for a premium product concept, then build a tasteful visual direction board that uses the images, palette, typography, and usage notes.',
+    },
+    {
+      id: 'import',
+      label: 'Import / Drop Files',
+      detail: 'Attach files or restore a desktop',
+      Icon: UploadIcon,
+      tone: 'from-slate-400 to-slate-600',
+      action: 'import',
+    },
+  ], []);
+
+  const handleNewStarter = useCallback((starter) => {
+    if (!starter) return;
+    setShowNewMenu(false);
+    if (starter.action === 'import') {
+      desktopDocInputRef.current?.click();
+      return;
+    }
+    starter.beforeRun?.();
+    handleDesktopSubmit(starter.prompt, starter.options || {});
+  }, [handleDesktopSubmit]);
+
   useEffect(() => {
     if (!artifactsHydrated || desktopArtifacts.length === 0) return;
     const timer = window.setTimeout(() => {
@@ -11414,6 +12603,15 @@ When laying out the page, build sections in the order suggested by the roles (he
       keywords: ['scene', 'pipeline', 'preset'],
     },
     {
+      id: 'open-new-menu',
+      title: 'Open New Menu',
+      subtitle: 'Start an artifact, Thinklet, automation, research board, or import',
+      group: 'Create',
+      icon: PlusIcon,
+      run: () => { setShowNewMenu(true); setIsDesktopComboOpen(false); setShowToolsMenu(false); },
+      keywords: ['new', 'create', 'starter'],
+    },
+    {
       id: 'open-job-center',
       title: 'Open Job Center',
       subtitle: `${activeGenerationJobsCount} active · ${generationJobs.length} total`,
@@ -11479,6 +12677,15 @@ When laying out the page, build sections in the order suggested by the roles (he
       icon: NetworkIcon,
       run: () => { setShowBusMonitor(true); setShowJobCenter(false); setShowPromptHistory(false); },
       keywords: ['bus', 'events', 'thinklets'],
+    },
+    {
+      id: 'artifact-relationships',
+      title: 'Artifact Relationships',
+      subtitle: `${desktopConnections.length} edges · ${desktopStacks.length} chains`,
+      group: 'Monitor',
+      icon: NetworkIcon,
+      run: () => { setShowRelationshipPanel(true); setShowBusMonitor(false); setShowJobCenter(false); setShowPromptHistory(false); },
+      keywords: ['relationships', 'edges', 'links', 'graph'],
     },
     {
       id: 'automation-studio',
@@ -11574,6 +12781,15 @@ When laying out the page, build sections in the order suggested by the roles (he
       keywords: ['brand', 'project', 'context'],
     },
     {
+      id: 'workspace-memory',
+      title: 'Workspace Memory',
+      subtitle: `${getWorkspaceMemoryLines(workspaceMemory).length} persistent notes`,
+      group: 'Workspace',
+      icon: BrainIcon,
+      run: () => setShowWorkspaceMemoryModal(true),
+      keywords: ['memory', 'intent', 'continuity', 'context'],
+    },
+    {
       id: 'connected-apps',
       title: 'Connected Apps',
       subtitle: 'Manage Composio OAuth connections',
@@ -11631,6 +12847,7 @@ When laying out the page, build sections in the order suggested by the roles (he
     openArtifactsCount,
     promptHistory.length,
     toggleDesktopAutomationMode,
+    workspaceMemory,
     workspaceHealthItems,
     workspaceSnapshots.length,
   ]);
@@ -12578,6 +13795,14 @@ Output JSON only (no markdown fences):
   }, [content?.projectRules]);
 
   useEffect(() => {
+    if (!content?.workspaceMemory) return;
+    const incoming = normalizeWorkspaceMemory(content.workspaceMemory);
+    const current = workspaceMemoryRef.current || DEFAULT_WORKSPACE_MEMORY;
+    const same = JSON.stringify(incoming) === JSON.stringify(normalizeWorkspaceMemory(current));
+    if (!same) setWorkspaceMemory(incoming);
+  }, [content?.workspaceMemory]);
+
+  useEffect(() => {
     const next = Number(content?.desktopAutomationInterval);
     if (Number.isFinite(next) && next > 0) setDesktopAutomationInterval(next);
   }, [content?.desktopAutomationInterval]);
@@ -12624,9 +13849,74 @@ Output JSON only (no markdown fences):
   const desktopInputPlaceholder = isDesktopAutomationModeOn
     ? 'Describe an automation outcome... e.g. When a lead arrives, research it, draft outreach, and save the next step'
     : 'Ask for anything... apps, tools, images, notes...';
-  const desktopInputHelper = isDesktopAutomationModeOn
-    ? 'Automation mode builds Thinklet agents, wires their bus handoffs, opens Studio, and starts the first run.'
-    : null;
+  const toolbarShellClass = `h-12 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 backdrop-blur-2xl border-b relative z-50 transition-colors duration-300 ${
+    desktopLightMode
+      ? 'bg-white/[0.76] border-white/70 shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_60px_rgba(15,23,42,0.08)]'
+      : 'bg-slate-950/[0.58] border-white/[0.08] shadow-[0_1px_0_rgba(255,255,255,0.04),0_18px_70px_rgba(0,0,0,0.32)]'
+  }`;
+  const toolbarClusterClass = `flex items-center gap-1 rounded-full border px-1.5 py-1 backdrop-blur-xl ${
+    desktopLightMode
+      ? 'border-slate-200/70 bg-white/[0.68] shadow-sm shadow-slate-300/10'
+      : 'border-white/[0.08] bg-white/[0.045] shadow-sm shadow-black/15'
+  }`;
+  const toolbarButtonClass = (active = false, tone = 'neutral') => {
+    const activeTone = {
+      violet: desktopLightMode ? 'bg-violet-100 text-violet-800 shadow-sm' : 'bg-violet-400/15 text-violet-100 ring-1 ring-violet-300/20',
+      cyan: desktopLightMode ? 'bg-cyan-100 text-cyan-800 shadow-sm' : 'bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-300/20',
+      emerald: desktopLightMode ? 'bg-emerald-100 text-emerald-800 shadow-sm' : 'bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/20',
+      amber: desktopLightMode ? 'bg-amber-100 text-amber-800 shadow-sm' : 'bg-amber-400/15 text-amber-100 ring-1 ring-amber-300/20',
+      neutral: desktopLightMode ? 'bg-slate-950 text-white shadow-sm' : 'bg-white/14 text-white ring-1 ring-white/10',
+    };
+    return `inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-all duration-150 ${
+      active
+        ? activeTone[tone] || activeTone.neutral
+        : desktopLightMode
+          ? 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900'
+          : 'text-white/52 hover:bg-white/[0.08] hover:text-white'
+    }`;
+  };
+  const toolbarIconButtonClass = (active = false, tone = 'neutral') => `${toolbarButtonClass(active, tone)} px-2.5`;
+  const popoverPanelClass = (widthClass = 'w-80') => `absolute top-full mt-2 ${widthClass} overflow-hidden rounded-[24px] border backdrop-blur-2xl ${
+    desktopLightMode
+      ? 'border-white/75 bg-white/[0.96] text-slate-950 shadow-[0_28px_90px_rgba(15,23,42,0.16),inset_0_1px_0_rgba(255,255,255,0.75)]'
+      : 'border-white/[0.10] bg-slate-950/[0.90] text-white shadow-[0_30px_100px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.08)]'
+  }`;
+  const popoverHeaderClass = `px-4 py-3.5 border-b ${
+    desktopLightMode
+      ? 'border-slate-200/70 bg-gradient-to-r from-white via-slate-50/90 to-cyan-50/50'
+      : 'border-white/[0.08] bg-gradient-to-r from-white/[0.07] via-white/[0.035] to-cyan-400/[0.06]'
+  }`;
+  const popoverSectionClass = `rounded-2xl border ${
+    desktopLightMode ? 'border-slate-200/70 bg-white/[0.78] shadow-sm' : 'border-white/[0.07] bg-white/[0.035]'
+  }`;
+  const popoverItemClass = (active = false, tone = 'neutral') => {
+    const toneClass = {
+      violet: desktopLightMode ? 'bg-violet-50 text-violet-800 border-violet-100' : 'bg-violet-400/10 text-violet-200 border-violet-300/14',
+      cyan: desktopLightMode ? 'bg-cyan-50 text-cyan-800 border-cyan-100' : 'bg-cyan-400/10 text-cyan-200 border-cyan-300/14',
+      emerald: desktopLightMode ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-emerald-400/10 text-emerald-200 border-emerald-300/14',
+      amber: desktopLightMode ? 'bg-amber-50 text-amber-800 border-amber-100' : 'bg-amber-400/10 text-amber-200 border-amber-300/14',
+      rose: desktopLightMode ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-rose-400/10 text-rose-200 border-rose-300/14',
+      neutral: desktopLightMode ? 'bg-slate-50 text-slate-900 border-slate-200' : 'bg-white/[0.07] text-white border-white/[0.08]',
+    };
+    return `w-full flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+      active
+        ? toneClass[tone] || toneClass.neutral
+        : desktopLightMode
+          ? 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950'
+          : 'border-transparent text-white/68 hover:border-white/[0.08] hover:bg-white/[0.055] hover:text-white'
+    }`;
+  };
+  const popoverIconClass = (tone = 'neutral') => {
+    const tones = {
+      violet: desktopLightMode ? 'bg-violet-100 text-violet-700' : 'bg-violet-400/14 text-violet-200',
+      cyan: desktopLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-400/14 text-cyan-200',
+      emerald: desktopLightMode ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-400/14 text-emerald-200',
+      amber: desktopLightMode ? 'bg-amber-100 text-amber-700' : 'bg-amber-400/14 text-amber-200',
+      rose: desktopLightMode ? 'bg-rose-100 text-rose-600' : 'bg-rose-400/14 text-rose-200',
+      neutral: desktopLightMode ? 'bg-slate-100 text-slate-600' : 'bg-white/[0.07] text-white/70',
+    };
+    return `flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl ${tones[tone] || tones.neutral}`;
+  };
 
   // ─── Desktop JSX Render ─────────────────────────────────────────────────
   return (
@@ -12689,18 +13979,14 @@ Output JSON only (no markdown fences):
               )}
 
               <div
-                className={`h-9 flex-shrink-0 flex items-center justify-between px-2 sm:px-4 backdrop-blur-xl border-b relative z-50 transition-colors duration-300 ${
-                  desktopLightMode
-                    ? 'bg-white/80 border-gray-200/60'
-                    : 'bg-black/60 border-white/10'
-                }`}
+                className={toolbarShellClass}
                 style={{ isolation: 'isolate' }}
               >
-                <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-shrink-0">
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <div className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 cursor-pointer transition-colors" onClick={() => setShowClearDesktopConfirm(true)} title="Clear All Artifacts" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-400 cursor-pointer transition-colors" onClick={() => persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: true })))} title="Minimize All" />
-                    <div className="w-3 h-3 rounded-full bg-green-500 hover:bg-green-400 cursor-pointer transition-colors" onClick={() => persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: false })))} title="Restore All" />
+                <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
+                  <div className={`${toolbarClusterClass} flex-shrink-0`}>
+                    <button className="w-3 h-3 rounded-full bg-rose-400 hover:bg-rose-300 cursor-pointer transition-colors shadow-sm shadow-rose-500/20" onClick={() => setShowClearDesktopConfirm(true)} title="Clear All Artifacts" />
+                    <button className="w-3 h-3 rounded-full bg-amber-300 hover:bg-amber-200 cursor-pointer transition-colors shadow-sm shadow-amber-500/20" onClick={() => persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: true })))} title="Minimize All" />
+                    <button className="w-3 h-3 rounded-full bg-emerald-400 hover:bg-emerald-300 cursor-pointer transition-colors shadow-sm shadow-emerald-500/20" onClick={() => persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: false })))} title="Restore All" />
                   </div>
 
                   {/* Connection Mode Indicator */}
@@ -12718,17 +14004,19 @@ Output JSON only (no markdown fences):
                     </motion.div>
                   )}
 
-                  <div className="relative ml-2 flex-shrink-0" ref={desktopSettingsRef}>
+                  <div className="relative flex-shrink-0" ref={desktopSettingsRef}>
                     <button
-                      onClick={() => setIsDesktopSettingsOpen(!isDesktopSettingsOpen)}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all flex-shrink-0 ${
-                        isDesktopSettingsOpen
-                          ? desktopLightMode ? 'bg-gray-200 text-gray-900' : 'bg-white/15 text-white'
-                          : desktopLightMode ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-white/50 hover:text-white/80 hover:bg-white/10'
-                      }`}
+                      onClick={() => {
+                        setIsDesktopSettingsOpen(!isDesktopSettingsOpen);
+                        setIsDesktopModeMenuOpen(false);
+                      }}
+                      className={toolbarButtonClass(isDesktopSettingsOpen, 'neutral')}
                     >
-                      <span className="text-xs font-bold tracking-wider whitespace-nowrap hidden sm:inline">Thinklet Desktop</span>
-                      <span className="text-xs font-bold tracking-wider whitespace-nowrap sm:hidden">Desktop</span>
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 via-blue-500 to-rose-400">
+                        <SparklesIcon className="h-3 w-3 text-white" />
+                      </span>
+                      <span className="whitespace-nowrap hidden sm:inline">Thinklet Desktop</span>
+                      <span className="whitespace-nowrap sm:hidden">Desktop</span>
                       <ChevronDownIcon className={`w-3 h-3 transition-transform ${isDesktopSettingsOpen ? 'rotate-180' : ''}`} />
                     </button>
 
@@ -12739,35 +14027,37 @@ Output JSON only (no markdown fences):
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -5, scale: 0.95 }}
                           transition={{ duration: 0.15 }}
-                          className={`absolute top-full left-0 mt-2 w-72 rounded-2xl shadow-2xl overflow-hidden border ${
-                            desktopLightMode
-                              ? 'bg-white border-gray-200 shadow-gray-300/30'
-                              : 'bg-gray-900 border-white/15 shadow-black/50'
-                          }`}
+                          className={popoverPanelClass('left-0 w-80')}
                           style={{ zIndex: 99999 }}
                         >
-                          <div className={`px-4 py-3 border-b ${desktopLightMode ? 'border-gray-100' : 'border-white/10'}`}>
-                            <span className={`text-xs font-bold uppercase tracking-widest ${desktopLightMode ? 'text-gray-500' : 'text-gray-400'}`}>Desktop Settings</span>
+                          <div className={popoverHeaderClass}>
+                            <div className="flex items-center gap-3">
+                              <div className={popoverIconClass('cyan')}>
+                                <SparklesIcon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Desktop Settings</div>
+                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>{desktopArtifacts.length} artifacts · {savedWallpapers.length} wallpapers</div>
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="p-3 space-y-1">
+                          <div className="p-2.5 space-y-1">
                             <button
                               onClick={() => {
                                 handleToggleDesktopLightMode();
                               }}
-                              className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                              }`}
+                              className={popoverItemClass(false, desktopLightMode ? 'neutral' : 'violet')}
                             >
                               <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${desktopLightMode ? 'bg-gray-100 text-gray-600' : 'bg-white/10 text-gray-300'}`}>
+                                <div className={popoverIconClass(desktopLightMode ? 'neutral' : 'violet')}>
                                   {desktopLightMode ? <MoonIcon className="w-4 h-4" /> : <SunIcon className="w-4 h-4" />}
                                 </div>
                                 <div className="text-left">
-                                  <span className={`text-xs font-bold block ${desktopLightMode ? 'text-gray-700' : 'text-gray-200'}`}>
+                                  <span className="text-xs font-semibold block">
                                     {desktopLightMode ? 'Switch to Dark' : 'Switch to Light'}
                                   </span>
-                                  <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                     Currently {desktopLightMode ? 'light' : 'dark'} mode
                                   </span>
                                 </div>
@@ -12779,23 +14069,17 @@ Output JSON only (no markdown fences):
 
                             <button
                               onClick={() => setDesktopCrisprValidateAfter(!desktopCrisprValidateAfter)}
-                              className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                              }`}
+                              className={popoverItemClass(desktopCrisprValidateAfter, 'emerald')}
                             >
                               <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                  desktopCrisprValidateAfter
-                                    ? desktopLightMode ? 'bg-emerald-100 text-emerald-600' : 'bg-emerald-500/20 text-emerald-400'
-                                    : desktopLightMode ? 'bg-gray-100 text-gray-400' : 'bg-white/10 text-gray-500'
-                                }`}>
+                                <div className={popoverIconClass(desktopCrisprValidateAfter ? 'emerald' : 'neutral')}>
                                   <ShieldIcon className="w-4 h-4" />
                                 </div>
                                 <div className="text-left">
-                                  <span className={`text-xs font-bold block ${desktopLightMode ? 'text-gray-700' : 'text-gray-200'}`}>
+                                  <span className="text-xs font-semibold block">
                                     CRISPR Validation
                                   </span>
-                                  <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                     Check tag balance after patches
                                   </span>
                                 </div>
@@ -12805,7 +14089,7 @@ Output JSON only (no markdown fences):
                               </div>
                             </button>
 
-                            <div className={`my-2 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/10'}`} />
+                            <div className={`my-2 h-px ${desktopLightMode ? 'bg-slate-200/70' : 'bg-white/[0.07]'}`} />
 
                             <button
                               onClick={() => {
@@ -12813,16 +14097,14 @@ Output JSON only (no markdown fences):
                                 setIsDesktopSettingsOpen(false);
                                 toast({ title: "Restored", description: "All windows restored" });
                               }}
-                              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                              }`}
+                              className={popoverItemClass(false, 'cyan')}
                             >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${desktopLightMode ? 'bg-blue-100 text-blue-600' : 'bg-blue-500/20 text-blue-400'}`}>
+                              <div className={popoverIconClass('cyan')}>
                                 <MaximizeIcon className="w-4 h-4" />
                               </div>
                               <div className="text-left">
-                                <span className={`text-xs font-bold block ${desktopLightMode ? 'text-gray-700' : 'text-gray-200'}`}>Restore All Windows</span>
-                                <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <span className="text-xs font-semibold block">Restore All Windows</span>
+                                <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                   {minimizedArtifacts.length} minimized
                                 </span>
                               </div>
@@ -12834,16 +14116,14 @@ Output JSON only (no markdown fences):
                                 setIsDesktopSettingsOpen(false);
                                 toast({ title: "Minimized", description: "All windows minimized" });
                               }}
-                              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                              }`}
+                              className={popoverItemClass(false, 'amber')}
                             >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${desktopLightMode ? 'bg-amber-100 text-amber-600' : 'bg-amber-500/20 text-amber-400'}`}>
+                              <div className={popoverIconClass('amber')}>
                                 <MinimizeIcon className="w-4 h-4" />
                               </div>
                               <div className="text-left">
-                                <span className={`text-xs font-bold block ${desktopLightMode ? 'text-gray-700' : 'text-gray-200'}`}>Minimize All Windows</span>
-                                <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <span className="text-xs font-semibold block">Minimize All Windows</span>
+                                <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                   {openArtifactsCount} open
                                 </span>
                               </div>
@@ -12854,16 +14134,14 @@ Output JSON only (no markdown fences):
                                 setIsDesktopBgMenuOpen(true);
                                 setIsDesktopSettingsOpen(false);
                               }}
-                              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                              }`}
+                              className={popoverItemClass(false, 'violet')}
                             >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${desktopLightMode ? 'bg-fuchsia-100 text-fuchsia-600' : 'bg-fuchsia-500/20 text-fuchsia-400'}`}>
+                              <div className={popoverIconClass('violet')}>
                                 <PaletteIcon className="w-4 h-4" />
                               </div>
                               <div className="text-left">
-                                <span className={`text-xs font-bold block ${desktopLightMode ? 'text-gray-700' : 'text-gray-200'}`}>Change Background</span>
-                                <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <span className="text-xs font-semibold block">Change Background</span>
+                                <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                   {desktopBackground.type === 'video' ? 'Video' : desktopBackground.type === 'image' ? 'AI Image' : desktopBackground.type === 'color' ? 'Solid color' : 'Gradient'}
                                 </span>
                               </div>
@@ -12875,22 +14153,20 @@ Output JSON only (no markdown fences):
                                 setIsStackPanelOpen(!isStackPanelOpen);
                                 setIsDesktopSettingsOpen(false);
                               }}
-                              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/5'
-                              }`}
+                              className={popoverItemClass(isStackPanelOpen, 'cyan')}
                             >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${desktopLightMode ? 'bg-cyan-100 text-cyan-600' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                              <div className={popoverIconClass('cyan')}>
                                 <GitBranchIcon className="w-4 h-4" />
                               </div>
                               <div className="text-left">
-                                <span className={`text-xs font-bold block ${desktopLightMode ? 'text-gray-700' : 'text-gray-200'}`}>Automation Studio</span>
-                                <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <span className="text-xs font-semibold block">Automation Studio</span>
+                                <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                   {desktopConnections.length} edge{desktopConnections.length !== 1 ? 's' : ''}, {desktopStacks.length} chain{desktopStacks.length !== 1 ? 's' : ''}
                                 </span>
                               </div>
                             </button>
 
-                            <div className={`my-2 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/10'}`} />
+                            <div className={`my-2 h-px ${desktopLightMode ? 'bg-slate-200/70' : 'bg-white/[0.07]'}`} />
 
                             <button
                               onClick={async () => {
@@ -12903,24 +14179,22 @@ Output JSON only (no markdown fences):
                                 setIsDesktopSettingsOpen(false);
                                 toast({ title: "Cleared", description: `Removed ${desktopArtifacts.length} artifact${desktopArtifacts.length !== 1 ? 's' : ''}` });
                               }}
-                              className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors ${
-                                desktopLightMode ? 'hover:bg-red-50' : 'hover:bg-red-500/10'
-                              }`}
+                              className={popoverItemClass(false, 'rose')}
                             >
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${desktopLightMode ? 'bg-red-100 text-red-500' : 'bg-red-500/20 text-red-400'}`}>
+                              <div className={popoverIconClass('rose')}>
                                 <TrashIcon className="w-4 h-4" />
                               </div>
                               <div className="text-left">
-                                <span className={`text-xs font-bold block ${desktopLightMode ? 'text-red-600' : 'text-red-400'}`}>Clear All Artifacts</span>
-                                <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <span className="text-xs font-semibold block">Clear All Artifacts</span>
+                                <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                   {desktopArtifacts.length} artifact{desktopArtifacts.length !== 1 ? 's' : ''} on desktop
                                 </span>
                               </div>
                             </button>
                           </div>
 
-                          <div className={`px-4 py-2.5 border-t ${desktopLightMode ? 'border-gray-100 bg-gray-50' : 'border-white/5 bg-gray-950/50'}`}>
-                            <div className={`flex items-center justify-between text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <div className={`px-4 py-2.5 border-t ${desktopLightMode ? 'border-slate-200/70 bg-slate-50/70' : 'border-white/[0.06] bg-white/[0.02]'}`}>
+                            <div className={`flex items-center justify-between text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/36'}`}>
                               <span>{desktopArtifacts.length} artifact{desktopArtifacts.length !== 1 ? 's' : ''}</span>
                               <span>{savedWallpapers.length} saved wallpaper{savedWallpapers.length !== 1 ? 's' : ''}</span>
                             </div>
@@ -12930,18 +14204,119 @@ Output JSON only (no markdown fences):
                     </AnimatePresence>
                   </div>
 
-                  <div className="relative ml-1 flex-shrink-0" ref={desktopComboRef}>
+                  <div className="relative flex-shrink-0" ref={desktopNewMenuRef}>
                     <button
-                      onClick={() => setIsDesktopComboOpen(!isDesktopComboOpen)}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all flex-shrink-0 ${
-                        isDesktopComboOpen
-                          ? desktopLightMode ? 'bg-violet-100 text-violet-700' : 'bg-violet-500/20 text-violet-300'
-                          : desktopLightMode ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-white/50 hover:text-white/80 hover:bg-white/10'
-                      }`}
+                      onClick={() => {
+                        setShowNewMenu((v) => !v);
+                        setIsDesktopComboOpen(false);
+                        setIsDesktopBgMenuOpen(false);
+                        setIsDesktopSettingsOpen(false);
+                      }}
+                      className={toolbarButtonClass(showNewMenu, 'cyan')}
+                      title="New artifact, app, automation, or import"
+                    >
+                      <PlusIcon className="w-3 h-3" />
+                      <span>New</span>
+                      <ChevronDownIcon className={`w-2.5 h-2.5 transition-transform ${showNewMenu ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showNewMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -5, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className={popoverPanelClass('left-0 w-[30rem] max-w-[calc(100vw-1rem)]')}
+                          style={{ zIndex: 99999 }}
+                        >
+                          <div className={`${popoverHeaderClass} flex items-center justify-between`}>
+                            <div className="flex items-center gap-3">
+                              <div className={popoverIconClass('cyan')}>
+                                <PlusIcon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>New</div>
+                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>Start with the right kind of workspace object.</div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setShowNewMenu(false);
+                                setShowTemplatesModal(true);
+                              }}
+                              className={`rounded-full px-3 py-1.5 text-[10px] font-bold transition-colors ${
+                                desktopLightMode ? 'bg-white text-slate-500 shadow-sm hover:text-violet-700' : 'bg-white/[0.07] text-white/50 hover:text-white'
+                              }`}
+                            >
+                              Templates
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 p-3">
+                            {desktopNewStarters.map((starter) => {
+                              const StarterIcon = starter.Icon;
+                              return (
+                                <button
+                                  key={starter.id}
+                                  onClick={() => handleNewStarter(starter)}
+                                  className={`group relative min-h-[108px] overflow-hidden rounded-2xl border p-3 text-left transition-all ${
+                                    desktopLightMode
+                                      ? 'border-slate-200/70 bg-white/82 hover:border-cyan-200 hover:bg-white hover:shadow-lg hover:shadow-cyan-500/10'
+                                      : 'border-white/[0.07] bg-white/[0.04] hover:border-white/[0.15] hover:bg-white/[0.07]'
+                                  }`}
+                                >
+                                  <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${starter.tone} opacity-70`} />
+                                  <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${starter.tone} text-white shadow-lg shadow-black/10`}>
+                                    <StarterIcon className="h-4 w-4" />
+                                  </div>
+                                  <div className={`text-[13px] font-bold ${desktopLightMode ? 'text-slate-900' : 'text-white/90'}`}>
+                                    {starter.label}
+                                  </div>
+                                  <div className={`mt-1 text-[11px] leading-4 ${desktopLightMode ? 'text-slate-500' : 'text-white/48'}`}>
+                                    {starter.detail}
+                                  </div>
+                                  <SendIcon className={`absolute bottom-3 right-3 h-3.5 w-3.5 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 ${desktopLightMode ? 'text-slate-400' : 'text-white/36'}`} />
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className={`border-t px-3 py-3 ${desktopLightMode ? 'border-slate-200/70 bg-slate-50/70' : 'border-white/[0.07] bg-white/[0.02]'}`}>
+                            <button
+                              onClick={() => {
+                                setShowNewMenu(false);
+                                setShowWorkspaceMemoryModal(true);
+                              }}
+                              className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-colors ${
+                                getWorkspaceMemoryLines(workspaceMemory).length > 0
+                                  ? desktopLightMode ? 'border-cyan-100 bg-cyan-50 text-cyan-800' : 'border-cyan-300/14 bg-cyan-300/[0.07] text-cyan-100'
+                                  : desktopLightMode ? 'border-slate-200 bg-white text-slate-600 hover:text-slate-950' : 'border-white/[0.07] bg-white/[0.035] text-white/56 hover:text-white'
+                              }`}
+                            >
+                              <BrainIcon className="h-4 w-4 flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold">Workspace memory active context</div>
+                                <div className={`mt-0.5 text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/38'}`}>
+                                  {getWorkspaceMemoryLines(workspaceMemory).length} note{getWorkspaceMemoryLines(workspaceMemory).length !== 1 ? 's' : ''} guide new builds.
+                                </div>
+                              </div>
+                              <ChevronDownIcon className="h-3 w-3 -rotate-90 opacity-50" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  <div className="relative flex-shrink-0" ref={desktopComboRef}>
+                    <button
+                      onClick={() => { setIsDesktopComboOpen(!isDesktopComboOpen); setIsDesktopModeMenuOpen(false); }}
+                      className={toolbarButtonClass(isDesktopComboOpen, 'violet')}
                       title="Scenes — Multi-step AI pipelines with research, images & video"
                     >
                       <SparklesIcon className="w-3 h-3" />
-                      <span className="text-xs font-bold tracking-wider hidden sm:inline">Scenes</span>
+                      <span className="hidden sm:inline">Scenes</span>
                       <ChevronDownIcon className={`w-2.5 h-2.5 transition-transform ${isDesktopComboOpen ? 'rotate-180' : ''}`} />
                     </button>
 
@@ -12952,37 +14327,29 @@ Output JSON only (no markdown fences):
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -5, scale: 0.95 }}
                           transition={{ duration: 0.15 }}
-                          className={`absolute top-full left-0 mt-1.5 overflow-hidden flex flex-col ${
-                            desktopLightMode
-                              ? 'bg-white border border-gray-200/80 shadow-xl shadow-black/8 ring-1 ring-black/5'
-                              : 'bg-gray-950 border border-white/10 shadow-2xl shadow-black/60 ring-1 ring-white/5'
-                          }`}
-                          style={{ zIndex: 99999, width: '52rem', maxHeight: '72vh', borderRadius: '14px' }}
+                          className={`${popoverPanelClass('left-0 w-[54rem] max-w-[calc(100vw-1rem)]')} flex flex-col`}
+                          style={{ zIndex: 99999, maxHeight: '74vh' }}
                         >
-                          <div className={`px-5 py-3 border-b flex-shrink-0 flex items-center justify-between ${
-                            desktopLightMode
-                              ? 'border-gray-100 bg-gray-50/80'
-                              : 'border-white/5 bg-white/[0.02]'
-                          }`}>
-                            <div className="flex items-center gap-2.5">
-                              <div className={`w-5 h-5 rounded-md flex items-center justify-center ${
-                                desktopLightMode ? 'bg-violet-100' : 'bg-violet-500/15'
-                              }`}>
-                                <SparklesIcon className={`w-3 h-3 ${desktopLightMode ? 'text-violet-600' : 'text-violet-400'}`} />
+                          <div className={`${popoverHeaderClass} flex-shrink-0 flex items-center justify-between`}>
+                            <div className="flex items-center gap-3">
+                              <div className={popoverIconClass('violet')}>
+                                <SparklesIcon className="w-4 h-4" />
                               </div>
-                              <span className={`text-xs font-semibold tracking-tight ${desktopLightMode ? 'text-gray-800' : 'text-gray-200'}`}>Scenes</span>
-                              <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>&mdash; Multi-step AI pipelines</span>
+                              <div>
+                                <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Scenes</div>
+                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>Multi-step pipelines for research, media, apps, and automation.</div>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               {hiddenScenes.length > 0 && (
                                 <button
                                   onClick={handleRestoreScenes}
-                                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-medium transition-colors ${
-                                    desktopLightMode ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100' : 'text-gray-600 hover:text-gray-400 hover:bg-white/5'
+                                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-semibold transition-colors ${
+                                    desktopLightMode ? 'bg-white text-slate-500 hover:text-slate-900 shadow-sm' : 'bg-white/[0.06] text-white/52 hover:text-white'
                                   }`}
                                   title="Restore hidden default scenes"
                                 >
-                                  <RotateCcwIcon className="w-2 h-2" />
+                                  <RotateCcwIcon className="w-3 h-3" />
                                   Restore
                                 </button>
                               )}
@@ -13004,24 +14371,24 @@ Output JSON only (no markdown fences):
                             const totalCount = desktopSceneFilter === 'all' ? visibleCombosAll.length : visibleCombosAll.filter(c => (c.category || 'General') === desktopSceneFilter).length;
                             return (
                               <>
-                                <div className={`flex items-center gap-1 px-3 py-2 border-b flex-shrink-0 overflow-x-auto no-scrollbar ${
+                                <div className={`flex items-center gap-2 px-3 py-2.5 border-b flex-shrink-0 overflow-x-auto no-scrollbar ${
                             desktopLightMode
-                              ? 'border-gray-100/80 bg-white'
-                              : 'border-white/[0.04] bg-gray-950/30'
+                              ? 'border-slate-200/70 bg-white/60'
+                              : 'border-white/[0.06] bg-white/[0.02]'
                           }`}>
-                                  <div className={`flex items-center gap-0.5 p-0.5 rounded-lg flex-shrink-0 ${
-                                    desktopLightMode ? 'bg-gray-100/80' : 'bg-white/[0.04]'
+                                  <div className={`flex items-center gap-1 p-1 rounded-full flex-shrink-0 ${
+                                    desktopLightMode ? 'bg-slate-100/80' : 'bg-white/[0.055]'
                                   }`}>
                                   <button
                                     onClick={() => setDesktopSceneFilter('all')}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
                                       desktopSceneFilter === 'all'
                                         ? desktopLightMode
-                                          ? 'bg-white text-gray-900 shadow-sm ring-1 ring-black/5'
-                                          : 'bg-white/10 text-white shadow-sm ring-1 ring-white/10'
+                                          ? 'bg-white text-slate-950 shadow-sm ring-1 ring-black/5'
+                                          : 'bg-white/14 text-white shadow-sm ring-1 ring-white/10'
                                         : desktopLightMode
-                                          ? 'text-gray-500 hover:text-gray-700'
-                                          : 'text-gray-500 hover:text-gray-300'
+                                          ? 'text-slate-500 hover:text-slate-800'
+                                          : 'text-white/46 hover:text-white/80'
                                     }`}
                                   >
                                     <SparklesIcon className="w-3 h-3" />
@@ -13031,14 +14398,14 @@ Output JSON only (no markdown fences):
                                   {desktopSavedScenes.length > 0 && (
                                     <button
                                       onClick={() => setDesktopSceneFilter(desktopSceneFilter === 'Saved' ? 'all' : 'Saved')}
-                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
                                         desktopSceneFilter === 'Saved'
                                           ? desktopLightMode
                                             ? 'bg-white text-amber-700 shadow-sm ring-1 ring-black/5'
-                                            : 'bg-white/10 text-amber-300 shadow-sm ring-1 ring-white/10'
+                                            : 'bg-white/14 text-amber-200 shadow-sm ring-1 ring-white/10'
                                           : desktopLightMode
                                             ? 'text-amber-600 hover:text-amber-700'
-                                            : 'text-amber-400/70 hover:text-amber-300'
+                                            : 'text-amber-300/58 hover:text-amber-200'
                                       }`}
                                     >
                                       <BookmarkIcon className="w-3 h-3" />
@@ -13058,14 +14425,14 @@ Output JSON only (no markdown fences):
                                       <button
                                         key={cat}
                                         onClick={() => setDesktopSceneFilter(isActive ? 'all' : cat)}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-medium whitespace-nowrap transition-all flex-shrink-0 ${
                                           isActive
                                             ? desktopLightMode
-                                              ? 'bg-gray-100 text-gray-900 ring-1 ring-gray-200'
-                                              : 'bg-white/10 text-white ring-1 ring-white/10'
+                                              ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
+                                              : 'bg-white/12 text-white ring-1 ring-white/10'
                                             : desktopLightMode
-                                              ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                              : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                              ? 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
+                                              : 'text-white/[0.42] hover:text-white/80 hover:bg-white/[0.06]'
                                         }`}
                                       >
                                         <CatFilterIcon className="w-3 h-3" />
@@ -13292,18 +14659,14 @@ Output JSON only (no markdown fences):
                     </AnimatePresence>
                   </div>
 
-                  <div className="relative ml-1 flex-shrink-0" ref={desktopBgMenuRef}>
+                  <div className="relative flex-shrink-0" ref={desktopBgMenuRef}>
                     <button
-                      onClick={() => setIsDesktopBgMenuOpen(!isDesktopBgMenuOpen)}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all flex-shrink-0 ${
-                        isDesktopBgMenuOpen
-                          ? desktopLightMode ? 'bg-gray-200 text-gray-900' : 'bg-white/15 text-white'
-                          : desktopLightMode ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-white/50 hover:text-white/80 hover:bg-white/10'
-                      }`}
+                      onClick={() => { setIsDesktopBgMenuOpen(!isDesktopBgMenuOpen); setIsDesktopModeMenuOpen(false); }}
+                      className={toolbarIconButtonClass(isDesktopBgMenuOpen, 'cyan')}
                       title="Desktop Background"
                     >
                       <PaletteIcon className="w-3 h-3" />
-                      <span className="text-xs font-bold tracking-wider hidden sm:inline">BG</span>
+                      <span className="hidden sm:inline">BG</span>
                     </button>
 
                     <AnimatePresence>
@@ -13313,22 +14676,28 @@ Output JSON only (no markdown fences):
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -5, scale: 0.95 }}
                           transition={{ duration: 0.15 }}
-                          className={`absolute top-full left-0 mt-2 w-96 rounded-2xl shadow-2xl overflow-hidden border ${
-                            desktopLightMode
-                              ? 'bg-white border-gray-200 shadow-gray-300/30'
-                              : 'bg-gray-900 border-white/15 shadow-black/50'
-                          }`}
-                          style={{ zIndex: 99999 }}
+                          className={popoverPanelClass('left-0 w-[27rem] max-w-[calc(100vw-1rem)]')}
+                          style={{ zIndex: 99999, maxHeight: 'calc(100vh - 4.25rem)' }}
                         >
-                          <div className={`px-4 py-3 border-b flex items-center justify-between ${desktopLightMode ? 'border-gray-100' : 'border-white/10'}`}>
-                            <span className={`text-xs font-bold uppercase tracking-widest ${desktopLightMode ? 'text-gray-500' : 'text-gray-400'}`}>Desktop Background</span>
+                          <div className={`${popoverHeaderClass} flex items-center justify-between`}>
+                            <div className="flex items-center gap-3">
+                              <div className={popoverIconClass('cyan')}>
+                                <PaletteIcon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Desktop Background</div>
+                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>
+                                  {desktopBackground.type === 'video' ? 'Motion wallpaper' : desktopBackground.type === 'image' ? 'Image wallpaper' : desktopBackground.type === 'color' ? 'Solid color' : 'Gradient'}
+                                </div>
+                              </div>
+                            </div>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={handleToggleDesktopLightMode}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all border ${
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-semibold transition-all border ${
                                   desktopLightMode
                                     ? 'bg-gray-900 text-white border-gray-700 hover:bg-gray-800'
-                                    : 'bg-white/10 text-white/60 border-white/10 hover:bg-white/15 hover:text-white'
+                                    : 'bg-white/10 text-white/66 border-white/10 hover:bg-white/15 hover:text-white'
                                 }`}
                                 title={desktopLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
                               >
@@ -13338,7 +14707,7 @@ Output JSON only (no markdown fences):
                               {(desktopBackground.type === 'image' || desktopBackground.type === 'video') && (
                                 <button
                                   onClick={() => persistDesktopBackground({ type: 'gradient', value: desktopLightMode ? 'linear-gradient(135deg, #e2e8f0 0%, #f1f5f9 30%, #e0e7ff 60%, #f0f9ff 100%)' : 'linear-gradient(135deg, #1a1c2e 0%, #16213e 30%, #0f3460 60%, #1a1c2e 100%)' })}
-                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-colors ${
+                                  className={`flex items-center gap-1 px-2 py-1.5 rounded-full text-[10px] font-semibold transition-colors ${
                                     desktopLightMode ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20'
                                   }`}
                                 >
@@ -13349,7 +14718,7 @@ Output JSON only (no markdown fences):
                             </div>
                           </div>
 
-                          <div className={`flex p-1 mx-3 mt-3 rounded-xl ${desktopLightMode ? 'bg-gray-100' : 'bg-white/5'}`}>
+                          <div className={`flex p-1 mx-3 mt-3 rounded-full ${desktopLightMode ? 'bg-slate-100/80' : 'bg-white/[0.055]'}`}>
                             {[
                               { id: 'colors', label: 'Colors', icon: PaletteIcon },
                               { id: 'generate', label: 'AI Generate', icon: SparklesIcon },
@@ -13358,10 +14727,10 @@ Output JSON only (no markdown fences):
                               <button
                                 key={tab.id}
                                 onClick={() => setDesktopBgTab(tab.id)}
-                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-full text-[10px] font-semibold transition-all ${
                                   desktopBgTab === tab.id
-                                    ? desktopLightMode ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'bg-white/10 text-white shadow-sm'
-                                    : desktopLightMode ? 'text-gray-400 hover:text-gray-600' : 'text-gray-500 hover:text-gray-300'
+                                    ? desktopLightMode ? 'bg-white text-slate-950 shadow-sm border border-slate-200' : 'bg-white/14 text-white shadow-sm'
+                                    : desktopLightMode ? 'text-slate-500 hover:text-slate-700' : 'text-white/[0.42] hover:text-white/75'
                                 }`}
                               >
                                 <tab.icon className="w-3 h-3" />
@@ -13370,7 +14739,7 @@ Output JSON only (no markdown fences):
                             ))}
                           </div>
 
-                          <div className="p-3 max-h-96 overflow-y-auto">
+                          <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 14rem)' }}>
                             {desktopBgTab === 'colors' && (
                               <div className="space-y-4">
                                 <div>
@@ -13381,9 +14750,9 @@ Output JSON only (no markdown fences):
                                       '#18181b', '#1c1917', '#292524', '#1e293b', '#0f3460',
                                       '#312e81', '#4c1d95', '#701a75', '#831843', '#7f1d1d',
                                       '#713f12', '#1a2e05', '#052e16', '#042f2e', '#0c4a6e'
-                                    ].map(color => (
+                                    ].map((color, idx) => (
                                       <button
-                                        key={color}
+                                        key={`${color}-${idx}`}
                                         onClick={() => persistDesktopBackground({ type: 'color', value: color })}
                                         className={`w-7 h-7 rounded-lg border-2 transition-all hover:scale-110 ${
                                           desktopBackground.type === 'color' && desktopBackground.value === color
@@ -13405,9 +14774,9 @@ Output JSON only (no markdown fences):
                                       '#fff7ed', '#fefce8', '#f0fdf4', '#ecfeff', '#eff6ff',
                                       '#eef2ff', '#faf5ff', '#fdf4ff', '#fff1f2', '#fef2f2',
                                       '#fffbeb', '#f0fdf4', '#f0fdfa', '#f5f3ff', '#fce7f3'
-                                    ].map(color => (
+                                    ].map((color, idx) => (
                                       <button
-                                        key={color}
+                                        key={`${color}-${idx}`}
                                         onClick={() => persistDesktopBackground({ type: 'color', value: color })}
                                         className={`w-7 h-7 rounded-lg border-2 transition-all hover:scale-110 ${
                                           desktopBackground.type === 'color' && desktopBackground.value === color
@@ -13429,9 +14798,9 @@ Output JSON only (no markdown fences):
                                       '#3b82f6', '#8b5cf6', '#d946ef', '#ec4899', '#f43f5e',
                                       '#14b8a6', '#10b981', '#84cc16', '#a855f7', '#6366f1',
                                       '#0ea5e9', '#2dd4bf', '#facc15', '#fb923c', '#e879f9'
-                                    ].map(color => (
+                                    ].map((color, idx) => (
                                       <button
-                                        key={color}
+                                        key={`${color}-${idx}`}
                                         onClick={() => persistDesktopBackground({ type: 'color', value: color })}
                                         className={`w-7 h-7 rounded-lg border-2 transition-all hover:scale-110 ${
                                           desktopBackground.type === 'color' && desktopBackground.value === color
@@ -13758,133 +15127,200 @@ Output JSON only (no markdown fences):
                 </div>
 
                 <motion.div
-                  className={`absolute left-1/2 -translate-x-1/2 top-0 h-9 z-[100] flex justify-center items-start ${
+                  className={`absolute left-1/2 -translate-x-1/2 top-1.5 h-9 z-[100] flex justify-center items-start ${
                     isDesktopInputFocused ? '' : 'w-48 sm:w-72 md:w-96'
                   }`}
                   initial={false}
                   animate={
-                    // Animate ONLY the width when the user focuses — the
-                    // surrounding toggles ("Thinklet/HTML" on the left and
-                    // "5" / "Automations" on the right) anchor to this
-                    // container via `absolute left-full` / `absolute right-full`,
-                    // so widening the parent slides them outward and stops the
-                    // input panel from overlapping them.
-                    //
-                    // We deliberately KEEP the parent's height fixed at the
-                    // topbar height (h-9) and let the inner panel overflow
-                    // downward instead. Without this, the parent's box grew
-                    // with its tall focused content (helper text + MODE row in
-                    // Automation Mode), top-1/2 / -translate-y-1/2 pulled half
-                    // of that growth ABOVE the topbar, and the textarea ended
-                    // up rendered off-screen — invisible and unclickable.
+                    // Animate only the width when the user focuses. The
+                    // Modes menu is anchored to this container, so it slides
+                    // outward while the prompt stays inside the toolbar.
                     isDesktopInputFocused
-                      ? { width: 'min(600px, calc(100vw - 360px))' }
+                      ? { width: 'clamp(360px, 56vw, 760px)' }
                       : { width: 'auto' }
                   }
                   transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                 >
-                  {/* Thinklet toggle — floats to the left of the command bar */}
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 mr-3 group flex items-center">
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full backdrop-blur-md border transition-colors shadow-sm ${
-                      desktopLightMode ? 'bg-white/80 border-gray-200/80' : 'bg-gray-900/80 border-white/10'
-                    }`}>
-                      <button
-                        onClick={(e) => { e.preventDefault(); toggleDesktopThinkletMode(); }}
-                        className={`relative w-7 h-4 rounded-full transition-colors flex-shrink-0 ${
-                          isDesktopThinkletModeOn ? 'bg-cyan-500' : desktopLightMode ? 'bg-gray-300' : 'bg-gray-600'
-                        }`}
-                      >
-                        <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${isDesktopThinkletModeOn ? 'left-3.5' : 'left-0.5'}`} />
-                      </button>
-                      <div className="flex items-center">
-                        <div className={`w-px h-3 mx-1 ${desktopLightMode ? 'bg-gray-300' : 'bg-white/20'}`} />
-                        <span className={`text-[10px] font-semibold whitespace-nowrap transition-colors ${
-                          isDesktopThinkletModeOn
-                            ? desktopLightMode ? 'text-cyan-600' : 'text-cyan-400'
-                            : desktopLightMode ? 'text-gray-400' : 'text-gray-500'
-                        }`}>
-                          {isDesktopThinkletModeOn ? 'Thinklet' : 'HTML'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="absolute right-1/2 translate-x-1/2 top-full mt-2 w-52 p-2.5 bg-gray-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 text-center shadow-xl border border-gray-700 leading-relaxed">
-                      <strong className="block mb-1 text-cyan-300">Thinklet Mode</strong>
-                      When enabled, AI generates interactive React apps (Thinklets) instead of plain HTML. Thinklets have persistent state and can use AI.
-                    </div>
-                  </div>
+                  <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2" ref={desktopModeMenuRef}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setIsDesktopModeMenuOpen(v => !v);
+                        setIsDesktopBgMenuOpen(false);
+                        setIsDesktopSettingsOpen(false);
+                        setIsDesktopComboOpen(false);
+                        setShowToolsMenu(false);
+                      }}
+                      className={toolbarButtonClass(isDesktopModeMenuOpen || isDesktopThinkletModeOn || isDesktopAutoIterateOn || isDesktopAutomationModeOn, 'violet')}
+                      title="Generation modes"
+                    >
+                      <ComponentIcon className="w-3 h-3" />
+                      <span className="hidden sm:inline">Modes</span>
+                      <ChevronDownIcon className={`w-2.5 h-2.5 transition-transform ${isDesktopModeMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
 
-                  {/* Iterations + Automation toggles — floats to the right of the command bar */}
-                  <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 flex items-center gap-1.5">
-                    <div className="relative group flex items-center">
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full backdrop-blur-md border transition-colors shadow-sm ${
-                        desktopLightMode ? 'bg-white/80 border-gray-200/80' : 'bg-gray-900/80 border-white/10'
-                      }`}>
-                        <button
-                          onClick={(e) => { e.preventDefault(); toggleDesktopAutoIterate(); }}
-                          className={`relative w-7 h-4 rounded-full transition-colors flex-shrink-0 ${
-                            isDesktopAutoIterateOn ? 'bg-violet-500' : desktopLightMode ? 'bg-gray-300' : 'bg-gray-600'
-                          }`}
+                    <AnimatePresence>
+                      {isDesktopModeMenuOpen && (
+                        <motion.div
+                          key="desktop-mode-menu"
+                          initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                          transition={{ duration: 0.13 }}
+                          className={popoverPanelClass('left-1/2 -translate-x-1/2 w-80 max-w-[calc(100vw-1rem)]')}
+                          style={{ zIndex: 99999 }}
                         >
-                          <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${isDesktopAutoIterateOn ? 'left-3.5' : 'left-0.5'}`} />
-                        </button>
-                        <div className="flex items-center">
-                          <div className={`w-px h-3 mx-1 ${desktopLightMode ? 'bg-gray-300' : 'bg-white/20'}`} />
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={desktopAutoIterateCount}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value.replace(/[^0-9]/g, ''));
-                              if (!isNaN(val)) updateDesktopAutoIterateCount(Math.min(20, Math.max(1, val)));
-                              else if (e.target.value === '') updateDesktopAutoIterateCount('');
-                            }}
-                            onBlur={() => {
-                              if (!desktopAutoIterateCount || isNaN(desktopAutoIterateCount)) updateDesktopAutoIterateCount(5);
-                            }}
-                            className={`w-6 bg-transparent border-none text-xs text-center focus:ring-0 p-0 font-medium transition-colors ${
-                              isDesktopAutoIterateOn
-                                ? desktopLightMode ? 'text-gray-700' : 'text-gray-300'
-                                : desktopLightMode ? 'text-gray-400' : 'text-gray-600'
-                            }`}
-                          />
-                        </div>
-                      </div>
-                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-48 p-2.5 bg-gray-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 text-center shadow-xl border border-gray-700 leading-relaxed">
-                        <strong className="block mb-1 text-violet-300">Auto-Improve</strong>
-                        When enabled, AI will autonomously run refinement passes after generating the initial mockup to polish the design and add realistic data.
-                      </div>
-                    </div>
-                    <div className="relative group flex items-center">
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full backdrop-blur-md border transition-colors shadow-sm ${
-                        isDesktopAutomationModeOn
-                          ? desktopLightMode ? 'bg-emerald-50/95 border-emerald-200/90' : 'bg-emerald-950/70 border-emerald-400/30'
-                          : desktopLightMode ? 'bg-white/80 border-gray-200/80' : 'bg-gray-900/80 border-white/10'
-                      }`}>
-                        <button
-                          onClick={(e) => { e.preventDefault(); toggleDesktopAutomationMode(); }}
-                          className={`relative w-7 h-4 rounded-full transition-colors flex-shrink-0 ${
-                            isDesktopAutomationModeOn ? 'bg-emerald-500' : desktopLightMode ? 'bg-gray-300' : 'bg-gray-600'
-                          }`}
-                        >
-                          <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${isDesktopAutomationModeOn ? 'left-3.5' : 'left-0.5'}`} />
-                        </button>
-                        <div className="flex items-center">
-                          <div className={`w-px h-3 mx-1 ${desktopLightMode ? 'bg-gray-300' : 'bg-white/20'}`} />
-                          <span className={`text-[10px] font-semibold whitespace-nowrap transition-colors ${
-                            isDesktopAutomationModeOn
-                              ? desktopLightMode ? 'text-emerald-700' : 'text-emerald-300'
-                              : desktopLightMode ? 'text-gray-400' : 'text-gray-500'
-                          }`}>
-                            Automations
-                          </span>
-                        </div>
-                      </div>
-                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-60 p-2.5 bg-gray-900 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 text-center shadow-xl border border-gray-700 leading-relaxed">
-                        <strong className="block mb-1 text-emerald-300">Automation Mode</strong>
-                        Enter an outcome in plain English. Desktop Studio will create agent Thinklets, wire their handoffs, and open the run inspector.
-                      </div>
-                    </div>
+                          <div className={`${popoverHeaderClass} flex items-center gap-3`}>
+                            <div className={popoverIconClass('violet')}>
+                              <ComponentIcon className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Generation Modes</div>
+                              <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>Choose output type, refinement, and automation behavior.</div>
+                            </div>
+                          </div>
+
+                          <div className="p-2.5 space-y-2">
+                            <button
+                              type="button"
+                              onClick={toggleDesktopThinkletMode}
+                              className={popoverItemClass(isDesktopThinkletModeOn, 'cyan')}
+                            >
+                              <div className={popoverIconClass(isDesktopThinkletModeOn ? 'cyan' : 'neutral')}>
+                                <LayoutIcon className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <span className="block text-xs font-semibold">{isDesktopThinkletModeOn ? 'Thinklet Apps' : 'HTML Artifacts'}</span>
+                                <span className={`block text-[10px] leading-snug ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
+                                  {isDesktopThinkletModeOn ? 'Interactive React apps with state.' : 'Self-contained static HTML windows.'}
+                                </span>
+                              </div>
+                              <div className={`relative h-5 w-9 rounded-full transition-colors ${isDesktopThinkletModeOn ? 'bg-cyan-500' : desktopLightMode ? 'bg-gray-300' : 'bg-gray-600'}`}>
+                                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isDesktopThinkletModeOn ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                              </div>
+                            </button>
+
+                            <div className={popoverItemClass(isDesktopAutoIterateOn, 'violet')}>
+                              <div className={popoverIconClass(isDesktopAutoIterateOn ? 'violet' : 'neutral')}>
+                                <SparklesIcon className="w-4 h-4" />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={toggleDesktopAutoIterate}
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <span className="block text-xs font-semibold">Auto-Improve</span>
+                                <span className={`block text-[10px] leading-snug ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
+                                  Run refinement passes after generation.
+                                </span>
+                              </button>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={desktopAutoIterateCount}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value.replace(/[^0-9]/g, ''));
+                                  if (!isNaN(val)) updateDesktopAutoIterateCount(Math.min(20, Math.max(1, val)));
+                                  else if (e.target.value === '') updateDesktopAutoIterateCount('');
+                                }}
+                                onBlur={() => {
+                                  if (!desktopAutoIterateCount || isNaN(desktopAutoIterateCount)) updateDesktopAutoIterateCount(5);
+                                }}
+                                className={`h-8 w-10 rounded-xl border bg-transparent text-center text-xs font-bold outline-none transition-colors ${
+                                  desktopLightMode ? 'border-slate-200 text-slate-700 focus:border-violet-300' : 'border-white/10 text-white/80 focus:border-violet-400/40'
+                                }`}
+                                title="Auto-improve iteration count"
+                              />
+                              <button
+                                type="button"
+                                onClick={toggleDesktopAutoIterate}
+                                className={`relative h-5 w-9 rounded-full transition-colors ${isDesktopAutoIterateOn ? 'bg-violet-500' : desktopLightMode ? 'bg-gray-300' : 'bg-gray-600'}`}
+                                title="Toggle auto-improve"
+                              >
+                                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isDesktopAutoIterateOn ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={toggleDesktopAutomationMode}
+                              className={popoverItemClass(isDesktopAutomationModeOn, 'emerald')}
+                            >
+                              <div className={popoverIconClass(isDesktopAutomationModeOn ? 'emerald' : 'neutral')}>
+                                <GitBranchIcon className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <span className="block text-xs font-semibold">Automation Mode</span>
+                                <span className={`block text-[10px] leading-snug ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
+                                  Create agent Thinklets and wire bus handoffs.
+                                </span>
+                              </div>
+                              <div className={`relative h-5 w-9 rounded-full transition-colors ${isDesktopAutomationModeOn ? 'bg-emerald-500' : desktopLightMode ? 'bg-gray-300' : 'bg-gray-600'}`}>
+                                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${isDesktopAutomationModeOn ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                              </div>
+                            </button>
+
+                            {isDesktopAutomationModeOn && (
+                              <div className={`rounded-2xl border p-2.5 ${desktopLightMode ? 'border-emerald-100 bg-emerald-50/70' : 'border-emerald-400/15 bg-emerald-500/[0.07]'}`}>
+                                <div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.14em] ${desktopLightMode ? 'text-emerald-700' : 'text-emerald-300/80'}`}>Run Mode</div>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  {[
+                                    { id: 'once', label: 'Once' },
+                                    { id: 'interval', label: 'Schedule' },
+                                    { id: 'bus', label: 'Event' },
+                                  ].map((mode) => (
+                                    <button
+                                      key={mode.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setDesktopAutomationRunMode(mode.id);
+                                        updateContentRef.current(TQL.set('desktopAutomationRunMode', mode.id));
+                                      }}
+                                      className={`rounded-xl border px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+                                        desktopAutomationRunMode === mode.id
+                                          ? desktopLightMode ? 'border-emerald-300 bg-white text-emerald-800 shadow-sm' : 'border-emerald-300/35 bg-emerald-400/15 text-emerald-100'
+                                          : desktopLightMode ? 'border-emerald-100 bg-white/55 text-emerald-700/65 hover:text-emerald-900' : 'border-emerald-300/10 bg-white/[0.04] text-emerald-200/60 hover:text-emerald-100'
+                                      }`}
+                                    >
+                                      {mode.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                {desktopAutomationRunMode === 'interval' && (
+                                  <div className={`mt-2 flex items-center justify-between rounded-xl border px-2.5 py-2 ${desktopLightMode ? 'border-emerald-100 bg-white/65' : 'border-emerald-300/10 bg-white/[0.04]'}`}>
+                                    <span className={`text-[10px] font-semibold ${desktopLightMode ? 'text-emerald-800' : 'text-emerald-100'}`}>Every</span>
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={desktopAutomationInterval}
+                                        onChange={(e) => {
+                                          const raw = e.target.value.replace(/[^0-9]/g, '');
+                                          const val = raw ? Math.min(10080, Math.max(1, parseInt(raw, 10))) : '';
+                                          setDesktopAutomationInterval(val);
+                                          if (val) updateContentRef.current(TQL.set('desktopAutomationInterval', val));
+                                        }}
+                                        onBlur={() => {
+                                          if (!desktopAutomationInterval) {
+                                            setDesktopAutomationInterval(30);
+                                            updateContentRef.current(TQL.set('desktopAutomationInterval', 30));
+                                          }
+                                        }}
+                                        className={`w-10 rounded-lg border bg-transparent px-1 py-0.5 text-center text-[10px] font-bold outline-none ${desktopLightMode ? 'border-emerald-200 text-emerald-900' : 'border-emerald-300/20 text-emerald-100'}`}
+                                      />
+                                      <span className={`text-[10px] ${desktopLightMode ? 'text-emerald-700' : 'text-emerald-200/75'}`}>min</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <motion.div
@@ -13895,13 +15331,9 @@ Output JSON only (no markdown fences):
                       // surrounding toggles aside). The input always fills
                       // 100% of that animated parent.
                       width: '100%',
-                      // Drop the focused panel just below the topbar (h-9 ≈
-                      // 36px) so the textarea isn't half-occluded by the
-                      // toolbar background. When unfocused, sit at the top
-                      // of the parent (which is the same as the topbar top).
-                      y: isDesktopInputFocused ? 42 : 0,
-                      scale: isDesktopInputFocused ? 1.02 : 1,
-                      borderRadius: isDesktopInputFocused ? 24 : 8,
+                      y: 0,
+                      scale: 1,
+                      borderRadius: isDesktopInputFocused ? 18 : 8,
                       boxShadow: isDesktopInputFocused
                         ? (desktopLightMode ? '0 25px 50px -12px rgba(0, 0, 0, 0.25)' : '0 25px 50px -12px rgba(0, 0, 0, 0.5)')
                         : 'none'
@@ -13921,17 +15353,17 @@ Output JSON only (no markdown fences):
                       e.preventDefault();
                       images.forEach((f) => { addAttachedImage(f); });
                     }}
-                    className={`flex items-start backdrop-blur-2xl px-2 sm:px-3 py-1 gap-2 transition-colors border ${
+                    className={`flex items-center backdrop-blur-2xl px-2 sm:px-3 py-1.5 gap-2 transition-colors border ${
                       isDesktopInputFocused
                         ? desktopLightMode
-                          ? 'bg-white/95 border-violet-400'
-                          : 'bg-gray-900/95 border-violet-500/50'
+                          ? 'bg-white/96 border-violet-300 shadow-slate-400/20'
+                          : 'bg-slate-950/94 border-violet-400/45'
                         : desktopLightMode
-                          ? 'bg-gray-900/10 border-gray-900/15 hover:bg-gray-900/15'
-                          : 'bg-white/10 border-white/15 hover:bg-white/20'
+                          ? 'bg-white/[0.72] border-slate-200/80 hover:bg-white'
+                          : 'bg-white/[0.065] border-white/[0.10] hover:bg-white/[0.10]'
                     }`}
                   >
-                    <SearchIcon className={`w-3.5 h-3.5 flex-shrink-0 transition-all ${isDesktopInputFocused ? 'mt-2' : 'mt-1'} ${desktopLightMode ? 'text-gray-500' : 'text-white/40'}`} />
+                    <SearchIcon className={`w-3.5 h-3.5 flex-shrink-0 transition-all ${desktopLightMode ? 'text-gray-500' : 'text-white/40'}`} />
                     <div className="flex-1 min-w-0">
                       {desktopAttachedImages.length > 0 && (
                         <div className={`flex items-center gap-1.5 flex-wrap pt-1 pb-1.5 ${isDesktopInputFocused ? '' : 'pb-1'}`}>
@@ -13993,108 +15425,12 @@ Output JSON only (no markdown fences):
                           }
                         }}
                         placeholder={desktopInputPlaceholder}
-                        rows={isDesktopInputFocused ? 4 : 1}
+                        rows={1}
                         className={`w-full bg-transparent border-none text-xs focus:outline-none focus:ring-0 resize-none overflow-y-auto transition-all ${
                           isDesktopInputFocused ? 'py-1.5' : 'py-0.5'
                         } ${desktopLightMode ? 'text-gray-900 placeholder-gray-500' : 'text-white placeholder-white/40'}`}
-                        style={{ minHeight: isDesktopInputFocused ? '80px' : '20px' }}
+                        style={{ minHeight: 20, maxHeight: 22 }}
                       />
-                      {desktopInputHelper && (isDesktopInputFocused || isDesktopAutomationModeOn) && (
-                        <div className={`mt-1 text-[10px] leading-snug ${desktopLightMode ? 'text-emerald-700' : 'text-emerald-300/90'}`}>
-                          {desktopInputHelper}
-                        </div>
-                      )}
-                      {/* Run-mode selector — only meaningful when Automation
-                        Mode is on. Sits inside the prompt area so it can't
-                        overflow the header on narrow viewports, and so it's
-                        visually grouped with the templates strip below. */}
-                      {isDesktopAutomationModeOn && (
-                        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider mr-0.5 ${desktopLightMode ? 'text-emerald-700/80' : 'text-emerald-300/70'}`}>Mode</span>
-                          {[
-                            { id: 'once',     icon: '⚡', label: 'Run once', tooltip: 'Build the workflow and run it immediately' },
-                            { id: 'interval', icon: '⏱',  label: 'Schedule', tooltip: 'Run on a fixed cadence' },
-                            { id: 'bus',      icon: '⇡',  label: 'On event',  tooltip: 'Trigger when a bus key publishes' },
-                          ].map((mode) => {
-                            const active = desktopAutomationRunMode === mode.id;
-                            return (
-                              <button
-                                key={mode.id}
-                                type="button"
-                                onMouseDown={(e) => { e.preventDefault(); setDesktopAutomationRunMode(mode.id); updateContentRef.current(TQL.set('desktopAutomationRunMode', mode.id)); }}
-                                title={mode.tooltip}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
-                                  active
-                                    ? desktopLightMode ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-emerald-500/25 border-emerald-400/40 text-emerald-200'
-                                    : desktopLightMode ? 'bg-white/60 border-gray-200 text-gray-600 hover:bg-emerald-50 hover:border-emerald-200' : 'bg-white/[0.03] border-white/10 text-gray-400 hover:bg-emerald-500/10 hover:border-emerald-400/25'
-                                }`}
-                              >
-                                <span aria-hidden="true">{mode.icon}</span>
-                                <span>{mode.label}</span>
-                              </button>
-                            );
-                          })}
-                          {desktopAutomationRunMode === 'interval' && (
-                            <div className={`flex items-center gap-1 pl-1.5 pr-1.5 py-0.5 rounded-full border ${desktopLightMode ? 'bg-emerald-50/70 border-emerald-200' : 'bg-emerald-500/10 border-emerald-400/25'}`}>
-                              <span className={`text-[9px] font-medium uppercase tracking-wider ${desktopLightMode ? 'text-emerald-700' : 'text-emerald-200/80'}`}>Every</span>
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                value={desktopAutomationInterval}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/[^0-9]/g, '');
-                                  const val = raw ? Math.min(10080, Math.max(1, parseInt(raw, 10))) : '';
-                                  setDesktopAutomationInterval(val);
-                                  if (val) updateContentRef.current(TQL.set('desktopAutomationInterval', val));
-                                }}
-                                onBlur={() => { if (!desktopAutomationInterval) { setDesktopAutomationInterval(30); updateContentRef.current(TQL.set('desktopAutomationInterval', 30)); } }}
-                                className={`w-8 bg-transparent border-none text-[10px] text-center focus:ring-0 p-0 font-bold tabular-nums ${desktopLightMode ? 'text-emerald-800' : 'text-emerald-100'}`}
-                                title="Interval in minutes"
-                              />
-                              <span className={`text-[9px] font-medium ${desktopLightMode ? 'text-emerald-700' : 'text-emerald-200/80'}`}>min</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {/* Automation templates strip — surfaces only when the
-                        user is in Automation Mode and hasn't typed yet. Each
-                        chip both fills the prompt and snaps the run-mode to
-                        the template's expected cadence so they don't have to
-                        re-pick "schedule" after clicking "Morning briefing". */}
-                      {isDesktopAutomationModeOn && isDesktopInputFocused && desktopInput.trim().length === 0 && (
-                        <div className="mt-2 -mb-0.5 flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[9px] font-bold uppercase tracking-wider mr-0.5 ${desktopLightMode ? 'text-emerald-700/80' : 'text-emerald-300/70'}`}>Try</span>
-                          {AUTOMATION_PROMPT_TEMPLATES.map((tpl) => (
-                            <button
-                              key={tpl.id}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setDesktopInput(tpl.prompt);
-                                if (tpl.suggestedRunMode) {
-                                  setDesktopAutomationRunMode(tpl.suggestedRunMode);
-                                  updateContentRef.current(TQL.set('desktopAutomationRunMode', tpl.suggestedRunMode));
-                                }
-                                if (tpl.suggestedRunMode === 'interval' && tpl.suggestedIntervalMin) {
-                                  setDesktopAutomationInterval(tpl.suggestedIntervalMin);
-                                  updateContentRef.current(TQL.set('desktopAutomationInterval', tpl.suggestedIntervalMin));
-                                }
-                                desktopInputRef.current?.focus();
-                              }}
-                              className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border transition-all ${
-                                desktopLightMode
-                                  ? 'bg-emerald-50/70 border-emerald-200/70 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300'
-                                  : 'bg-emerald-500/10 border-emerald-400/25 text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-400/45'
-                              }`}
-                              title={tpl.prompt}
-                            >
-                              <span aria-hidden="true">{tpl.icon}</span>
-                              <span>{tpl.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                     <input
                       type="file"
@@ -14119,7 +15455,7 @@ Output JSON only (no markdown fences):
                         e.target.value = '';
                       }}
                     />
-                    <div className={`flex items-center gap-1.5 flex-shrink-0 transition-all ${isDesktopInputFocused ? 'mt-1' : ''}`}>
+                    <div className="flex items-center gap-1.5 flex-shrink-0 transition-all">
                       {isUploadingDesktopFile ? (
                         <div className="p-1 flex-shrink-0 mr-1">
                           <RefreshCwIcon className={`w-3.5 h-3.5 animate-spin ${desktopLightMode ? 'text-violet-500' : 'text-violet-400'}`} />
@@ -14184,7 +15520,7 @@ Output JSON only (no markdown fences):
                   </motion.div>
                 </motion.div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className={`${toolbarClusterClass} flex-shrink-0`}>
 
                   {/* Loading indicator */}
                   {loadingArtifactsCount > 0 && activeGenerationJobsCount === 0 && (
@@ -14195,30 +15531,23 @@ Output JSON only (no markdown fences):
                   )}
 
                   <button
-                    onClick={() => { setShowJobCenter(v => !v); setShowPromptHistory(false); setShowBusMonitor(false); }}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all text-xs font-bold tracking-wider ${
-                      showJobCenter
-                        ? desktopLightMode ? 'bg-violet-100 text-violet-700' : 'bg-violet-500/20 text-violet-300'
-                        : desktopLightMode ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-white/50 hover:text-white hover:bg-white/10'
-                    }`}
+                    onClick={() => { setShowJobCenter(v => !v); setShowToolsMenu(false); setIsDesktopModeMenuOpen(false); setShowPromptHistory(false); setShowBusMonitor(false); }}
+                    className={toolbarButtonClass(showJobCenter, 'violet')}
                     title="Job Center"
                   >
                     {activeGenerationJobsCount > 0 ? <RefreshCwIcon className="w-3 h-3 animate-spin" /> : <ActivityIcon className="w-3 h-3" />}
                     <span className="hidden sm:inline">Jobs</span>
-                    {activeGenerationJobsCount > 0 && <span className="text-[10px] tabular-nums">{activeGenerationJobsCount}</span>}
+                    {activeGenerationJobsCount > 0 && <span className="rounded-full bg-white/20 px-1.5 text-[10px] tabular-nums">{activeGenerationJobsCount}</span>}
                   </button>
 
                   {/* ── Tools menu (⋯) ── */}
                   <div className="relative" ref={desktopToolsMenuRef}>
                     <button
-                      onClick={() => setShowToolsMenu(v => !v)}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all text-xs font-bold tracking-wider ${
-                        showToolsMenu
-                          ? desktopLightMode ? 'bg-gray-200 text-gray-900' : 'bg-white/15 text-white'
-                          : desktopLightMode ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-white/50 hover:text-white hover:bg-white/10'
-                      }`}
+                      onClick={() => { setShowToolsMenu(v => !v); setShowJobCenter(false); setIsDesktopModeMenuOpen(false); }}
+                      className={toolbarButtonClass(showToolsMenu, 'neutral')}
                       title="Tools"
                     >
+                      <WandIcon className="w-3 h-3" />
                       Tools
                     </button>
 
@@ -14230,20 +15559,27 @@ Output JSON only (no markdown fences):
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -6, scale: 0.96 }}
                           transition={{ duration: 0.13 }}
-                          className={`absolute top-full right-0 mt-1.5 w-72 rounded-xl shadow-2xl overflow-y-auto overflow-x-hidden overscroll-contain border ${
-                            desktopLightMode
-                              ? 'bg-white border-gray-200 shadow-gray-300/30'
-                              : 'bg-gray-900 border-white/12 shadow-black/60'
-                          }`}
+                          className={`${popoverPanelClass('right-0 w-80')} overflow-y-auto overflow-x-hidden overscroll-contain`}
                           style={{ zIndex: 99999, maxHeight: '80vh' }}
                         >
                           {/* clock / status row */}
-                          <div className={`flex items-center justify-between px-3 py-2 border-b ${desktopLightMode ? 'border-gray-100 bg-gray-50' : 'border-white/8 bg-white/3'}`}>
-                            <span className={`text-xs font-mono tabular-nums font-semibold ${desktopLightMode ? 'text-gray-600' : 'text-gray-300'}`}>{clockTime}</span>
-                            <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>{desktopArtifacts.length} artifact{desktopArtifacts.length !== 1 ? 's' : ''}</span>
+                          <div className={`${popoverHeaderClass} flex items-center justify-between`}>
+                            <div className="flex items-center gap-3">
+                              <div className={popoverIconClass('violet')}>
+                                <WandIcon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Tools</div>
+                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>Models, workspace controls, and system panels.</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`text-xs font-mono tabular-nums font-semibold ${desktopLightMode ? 'text-slate-600' : 'text-white/70'}`}>{clockTime}</div>
+                              <div className={`text-[10px] ${desktopLightMode ? 'text-slate-400' : 'text-white/34'}`}>{desktopArtifacts.length} artifact{desktopArtifacts.length !== 1 ? 's' : ''}</div>
+                            </div>
                           </div>
 
-                          <div className={`px-3 py-2 border-b ${desktopLightMode ? 'border-gray-100 bg-white' : 'border-white/8 bg-gray-900'}`}>
+                          <div className={`m-2.5 mb-2 rounded-2xl border px-3 py-2.5 ${desktopLightMode ? 'border-slate-200/70 bg-white/70' : 'border-white/[0.07] bg-white/[0.035]'}`}>
                             <div className="flex items-center gap-2 mb-1.5">
                               <BrainIcon className={`w-3.5 h-3.5 ${desktopLightMode ? 'text-indigo-500' : 'text-indigo-300'}`} />
                               <span className={`text-[10px] font-bold tracking-[0.12em] uppercase ${desktopLightMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -14260,7 +15596,7 @@ Output JSON only (no markdown fences):
                             <select
                               value={appSettings.defaultAiModel || DEFAULT_AI_MODEL}
                               onChange={(e) => persistAppSettings({ defaultAiModel: e.target.value })}
-                              className={`w-full rounded-lg border px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors ${
+                              className={`w-full rounded-xl border px-2.5 py-2 text-xs font-semibold outline-none transition-colors ${
                                 desktopLightMode
                                   ? 'border-gray-200 bg-gray-50 text-gray-800 focus:border-indigo-300 focus:bg-white'
                                   : 'border-white/10 bg-white/5 text-gray-100 focus:border-indigo-400/50 focus:bg-white/10'
@@ -14280,7 +15616,7 @@ Output JSON only (no markdown fences):
                           </div>
 
                           {/* CRISPR Mode — Fast vs Extended ──────────────────────────── */}
-                          <div className={`px-3 py-2 border-b ${desktopLightMode ? 'border-gray-100 bg-white' : 'border-white/8 bg-gray-900'}`}>
+                          <div className={`mx-2.5 mb-2 rounded-2xl border px-3 py-2.5 ${desktopLightMode ? 'border-slate-200/70 bg-white/70' : 'border-white/[0.07] bg-white/[0.035]'}`}>
                             <div className="flex items-center gap-2 mb-1.5">
                               <FlaskConicalIcon className={`w-3.5 h-3.5 ${desktopLightMode ? 'text-fuchsia-500' : 'text-fuchsia-300'}`} />
                               <span className={`text-[10px] font-bold tracking-[0.12em] uppercase ${desktopLightMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -14294,7 +15630,7 @@ Output JSON only (no markdown fences):
                                 {appSettings.crisprMode === 'fast' ? 'FAST' : 'EXTENDED'}
                               </span>
                             </div>
-                            <div className={`flex rounded-lg overflow-hidden border ${desktopLightMode ? 'border-gray-200 bg-gray-50' : 'border-white/10 bg-white/5'}`}>
+                            <div className={`flex rounded-xl overflow-hidden border ${desktopLightMode ? 'border-gray-200 bg-gray-50' : 'border-white/10 bg-white/5'}`}>
                               <button
                                 type="button"
                                 onClick={() => persistAppSettings({ crisprMode: 'fast' })}
@@ -14329,10 +15665,10 @@ Output JSON only (no markdown fences):
                             </p>
                           </div>
 
-                          <div className="p-1.5 space-y-0.5">
+                          <div className="p-2.5 pt-0 space-y-1">
                             {/* Prompt History */}
                             <button
-                              onClick={() => { setShowToolsMenu(false); setShowPromptHistory(v => !v); setShowBusMonitor(false); }}
+                              onClick={() => { setShowToolsMenu(false); setShowJobCenter(false); setShowPromptHistory(v => !v); setShowBusMonitor(false); }}
                               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left ${
                                 showPromptHistory
                                   ? desktopLightMode ? 'bg-amber-50 text-amber-700' : 'bg-amber-500/15 text-amber-300'
@@ -14350,7 +15686,7 @@ Output JSON only (no markdown fences):
 
                             {/* Bus Monitor */}
                             <button
-                              onClick={() => { setShowToolsMenu(false); setShowBusMonitor(v => !v); setShowPromptHistory(false); }}
+                              onClick={() => { setShowToolsMenu(false); setShowJobCenter(false); setShowBusMonitor(v => !v); setShowPromptHistory(false); }}
                               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left ${
                                 showBusMonitor
                                   ? desktopLightMode ? 'bg-violet-50 text-violet-700' : 'bg-violet-500/15 text-violet-300'
@@ -14389,6 +15725,27 @@ Output JSON only (no markdown fences):
                               <span className="text-xs font-medium flex-1">Automation Studio</span>
                               <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>
                                 {desktopConnections.length}/{desktopStacks.length}
+                              </span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setShowToolsMenu(false);
+                                setShowJobCenter(false);
+                                setShowBusMonitor(false);
+                                setShowPromptHistory(false);
+                                setShowRelationshipPanel(v => !v);
+                              }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left ${
+                                showRelationshipPanel
+                                  ? desktopLightMode ? 'bg-blue-50 text-blue-700' : 'bg-blue-500/15 text-blue-300'
+                                  : desktopLightMode ? 'text-gray-600 hover:bg-gray-50' : 'text-gray-300 hover:bg-white/5'
+                              }`}
+                            >
+                              <NetworkIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="text-xs font-medium flex-1">Artifact Relationships</span>
+                              <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                {desktopConnections.length} edge{desktopConnections.length !== 1 ? 's' : ''}
                               </span>
                             </button>
 
@@ -14434,7 +15791,7 @@ Output JSON only (no markdown fences):
                               )}
                             </button>
 
-                            <div className={`my-1 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/8'}`} />
+                            <div className={`my-1 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/[0.08]'}`} />
 
                             {/* Project Brand Prompt */}
                             <button
@@ -14477,6 +15834,24 @@ Output JSON only (no markdown fences):
                                   </span>
                                 );
                               })()}
+                            </button>
+
+                            <button
+                              onClick={() => { setShowToolsMenu(false); setShowWorkspaceMemoryModal(true); }}
+                              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left ${
+                                getWorkspaceMemoryLines(workspaceMemory).length > 0
+                                  ? desktopLightMode ? 'bg-cyan-50 text-cyan-700' : 'bg-cyan-500/10 text-cyan-300'
+                                  : desktopLightMode ? 'text-gray-600 hover:bg-gray-50' : 'text-gray-300 hover:bg-white/5'
+                              }`}
+                              title="Persistent workspace intent injected into every AI call"
+                            >
+                              <BrainIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="text-xs font-medium flex-1">Workspace Memory</span>
+                              {getWorkspaceMemoryLines(workspaceMemory).length > 0 && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${desktopLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-500/20 text-cyan-300'}`}>
+                                  {getWorkspaceMemoryLines(workspaceMemory).length}
+                                </span>
+                              )}
                             </button>
 
                             {/* Design Systems */}
@@ -14558,7 +15933,7 @@ Output JSON only (no markdown fences):
                               </span>
                             </button>
 
-                            <div className={`my-1 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/8'}`} />
+                            <div className={`my-1 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/[0.08]'}`} />
 
                             {/* Tidy */}
                             <button
@@ -14618,7 +15993,7 @@ Output JSON only (no markdown fences):
                               <span className="text-xs font-medium">Help & Guide</span>
                             </button>
 
-                            <div className={`my-1 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/8'}`} />
+                            <div className={`my-1 h-px ${desktopLightMode ? 'bg-gray-100' : 'bg-white/[0.08]'}`} />
 
                             {/* Export */}
                             <button
@@ -14653,35 +16028,39 @@ Output JSON only (no markdown fences):
                       <motion.div
                         key="prompt-history"
                         initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{ duration: 0.15 }}
-                        className={`absolute top-10 right-2 w-96 rounded-xl border shadow-2xl overflow-hidden ${
-                          desktopLightMode ? 'border-gray-200 bg-white' : 'border-white/10 bg-gray-950/98 backdrop-blur-xl'
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                          transition={{ duration: 0.15 }}
+                        className={`absolute top-14 right-3 w-[27rem] max-w-[calc(100vw-1.5rem)] rounded-[24px] border backdrop-blur-2xl shadow-2xl overflow-hidden ${
+                          desktopLightMode ? 'border-white/75 bg-white/[0.96] text-slate-950 shadow-slate-900/20' : 'border-white/[0.10] bg-slate-950/[0.90] text-white shadow-black/40'
                         }`}
-                        style={{ zIndex: 99999, boxShadow: desktopLightMode ? '0 8px 40px rgba(0,0,0,0.12)' : '0 0 0 1px rgba(245,158,11,0.2), 0 8px 40px rgba(0,0,0,0.5)' }}
+                        style={{ zIndex: 99999 }}
                       >
-                        <div className={`flex items-center justify-between px-4 py-2.5 border-b ${desktopLightMode ? 'border-gray-100 bg-amber-50/60' : 'border-white/8 bg-amber-500/10'}`}>
-                          <div className="flex items-center gap-2">
-                            <ClockIcon className="w-3 h-3 text-amber-400" />
-                            <span className={`text-[11px] font-semibold tracking-wide uppercase ${desktopLightMode ? 'text-amber-700' : 'text-amber-300'}`}>Prompt History</span>
-                            <span className={`text-[10px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>{promptHistory.length} saved</span>
+                        <div className={`${popoverHeaderClass} flex items-center justify-between`}>
+                          <div className="flex items-center gap-3">
+                            <div className={popoverIconClass('amber')}>
+                              <ClockIcon className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Prompt History</div>
+                              <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>{promptHistory.length} saved prompts for quick replay.</div>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {promptHistory.length > 0 && (
-                              <button onClick={() => persistPromptHistory([])} className={`text-[9px] transition-colors ${desktopLightMode ? 'text-gray-400 hover:text-red-500' : 'text-gray-600 hover:text-red-400'}`}>Clear all</button>
+                              <button onClick={() => persistPromptHistory([])} className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${desktopLightMode ? 'bg-white text-slate-500 hover:text-red-500 shadow-sm' : 'bg-white/[0.06] text-white/[0.44] hover:text-red-300'}`}>Clear all</button>
                             )}
-                            <button onClick={() => setShowPromptHistory(false)} className={`transition-colors ${desktopLightMode ? 'text-gray-400 hover:text-gray-700' : 'text-gray-500 hover:text-gray-300'}`}>
-                              <XIcon className="w-3 h-3" />
+                            <button onClick={() => setShowPromptHistory(false)} className={`rounded-full p-1.5 transition-colors ${desktopLightMode ? 'text-slate-400 hover:bg-slate-100 hover:text-slate-700' : 'text-white/40 hover:bg-white/[0.08] hover:text-white'}`}>
+                              <XIcon className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
                         {promptHistory.length === 0 ? (
                           <div className={`px-4 py-6 text-center text-[11px] ${desktopLightMode ? 'text-gray-400' : 'text-gray-500'}`}>Prompts you submit will appear here for quick replay.</div>
                         ) : (
-                          <div className="max-h-80 overflow-y-auto divide-y divide-white/5">
+                          <div className="max-h-96 overflow-y-auto p-2.5 space-y-1">
                             {promptHistory.map((h) => (
-                              <div key={h.id} className={`group flex items-start gap-3 px-4 py-2.5 transition-colors ${desktopLightMode ? 'hover:bg-gray-50' : 'hover:bg-white/4'}`}>
+                              <div key={h.id} className={`group flex items-start gap-3 rounded-2xl border px-3 py-2.5 transition-colors ${desktopLightMode ? 'border-transparent hover:border-slate-200 hover:bg-slate-50' : 'border-transparent hover:border-white/[0.08] hover:bg-white/[0.045]'}`}>
                                 <div className="flex-1 min-w-0">
                                   <div className={`text-[11px] leading-snug line-clamp-2 ${desktopLightMode ? 'text-gray-700' : 'text-gray-300'}`}>{h.prompt}</div>
                                   <div className={`text-[9px] mt-0.5 ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -14691,7 +16070,7 @@ Output JSON only (no markdown fences):
                                 <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
                                   <button
                                     onClick={() => { setDesktopInput(h.prompt); setShowPromptHistory(false); setTimeout(() => desktopInputRef.current?.focus(), 50); }}
-                                    className={`text-[9px] px-2 py-0.5 rounded transition-colors ${desktopLightMode ? 'bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700' : 'bg-white/8 text-gray-400 hover:bg-amber-500/20 hover:text-amber-300'}`}
+                                    className={`text-[9px] px-2 py-0.5 rounded transition-colors ${desktopLightMode ? 'bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700' : 'bg-white/[0.08] text-gray-400 hover:bg-amber-500/20 hover:text-amber-300'}`}
                                   >Edit</button>
                                   <button
                                     onClick={() => { setShowPromptHistory(false); handleDesktopSubmit(h.prompt); }}
@@ -14719,7 +16098,7 @@ Output JSON only (no markdown fences):
                       const statusClass = (status) => {
                         if (status === 'success') return desktopLightMode ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25';
                         if (status === 'error') return desktopLightMode ? 'bg-red-50 text-red-700 border-red-200' : 'bg-red-500/15 text-red-300 border-red-500/25';
-                        if (status === 'skipped') return desktopLightMode ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white/8 text-gray-400 border-white/10';
+                        if (status === 'skipped') return desktopLightMode ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white/[0.08] text-gray-400 border-white/10';
                         return desktopLightMode ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-500/15 text-blue-300 border-blue-500/25';
                       };
                       return (
@@ -14729,26 +16108,26 @@ Output JSON only (no markdown fences):
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -8, scale: 0.97 }}
                           transition={{ duration: 0.16 }}
-                          className={`absolute top-10 right-2 w-[520px] max-w-[calc(100vw-1rem)] rounded-2xl border shadow-2xl overflow-hidden ${
-                            desktopLightMode ? 'border-gray-200 bg-white' : 'border-white/10 bg-gray-950/98 backdrop-blur-xl'
+                          className={`absolute top-14 right-3 w-[560px] max-w-[calc(100vw-1.5rem)] rounded-[24px] border backdrop-blur-2xl shadow-2xl overflow-hidden ${
+                            desktopLightMode ? 'border-white/75 bg-white/[0.96] text-slate-950 shadow-slate-900/20' : 'border-white/[0.10] bg-slate-950/[0.90] text-white shadow-black/40'
                           }`}
-                          style={{ zIndex: 99999, boxShadow: desktopLightMode ? '0 18px 60px rgba(15,23,42,0.16)' : '0 0 0 1px rgba(34,211,238,0.16), 0 20px 70px rgba(0,0,0,0.58)' }}
+                          style={{ zIndex: 99999 }}
                         >
-                          <div className={`px-4 py-3 border-b ${desktopLightMode ? 'border-gray-100 bg-gradient-to-r from-cyan-50 to-violet-50' : 'border-white/8 bg-gradient-to-r from-cyan-500/10 to-violet-500/10'}`}>
+                          <div className={popoverHeaderClass}>
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500 to-violet-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                                  <NetworkIcon className="w-4 h-4 text-white" />
+                                <div className="relative w-9 h-9 rounded-2xl bg-gradient-to-br from-cyan-500 to-violet-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                                  <NetworkIcon className="w-4.5 h-4.5 text-white" />
                                   <span className="absolute -right-0.5 -top-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-gray-950 animate-pulse" />
                                 </div>
                                 <div className="min-w-0">
-                                  <div className={`text-[12px] font-bold tracking-wide uppercase ${desktopLightMode ? 'text-gray-900' : 'text-white'}`}>Automation Bus</div>
-                                  <div className={`text-[10px] truncate ${desktopLightMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                                  <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Automation Bus</div>
+                                  <div className={`text-[11px] truncate ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>
                                     {agents.length} agent{agents.length !== 1 ? 's' : ''} · {desktopConnections.length} edge{desktopConnections.length !== 1 ? 's' : ''} · {busKeys.length} key{busKeys.length !== 1 ? 's' : ''}
                                   </div>
                                 </div>
                               </div>
-                              <button onClick={() => setShowBusMonitor(false)} className={`p-1.5 rounded-lg transition-colors ${desktopLightMode ? 'text-gray-400 hover:text-gray-700 hover:bg-white' : 'text-gray-500 hover:text-gray-300 hover:bg-white/10'}`}>
+                              <button onClick={() => setShowBusMonitor(false)} className={`p-1.5 rounded-full transition-colors ${desktopLightMode ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-white/40 hover:text-white hover:bg-white/[0.08]'}`}>
                                 <XIcon className="w-4 h-4" />
                               </button>
                             </div>
@@ -14762,7 +16141,7 @@ Output JSON only (no markdown fences):
                               ].map(item => {
                                 const Icon = item.icon;
                                 return (
-                                  <div key={item.label} className={`rounded-xl border px-3 py-2 ${desktopLightMode ? 'bg-white/80 border-white shadow-sm' : 'bg-white/[0.04] border-white/8'}`}>
+                                  <div key={item.label} className={`rounded-xl border px-3 py-2 ${desktopLightMode ? 'bg-white/80 border-white shadow-sm' : 'bg-white/[0.04] border-white/[0.08]'}`}>
                                     <div className="flex items-center justify-between">
                                       <span className={`text-[9px] uppercase tracking-wider ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>{item.label}</span>
                                       <Icon className={`w-3 h-3 ${item.tone === 'red' ? 'text-red-400' : item.tone === 'blue' ? 'text-blue-400' : item.tone === 'violet' ? 'text-violet-400' : 'text-cyan-400'}`} />
@@ -14775,7 +16154,7 @@ Output JSON only (no markdown fences):
                           </div>
 
                           <div className="grid grid-cols-[1fr_1.05fr] max-h-[560px] overflow-hidden">
-                            <div className={`border-r overflow-y-auto ${desktopLightMode ? 'border-gray-100 bg-gray-50/60' : 'border-white/8 bg-white/[0.015]'}`}>
+                            <div className={`border-r overflow-y-auto ${desktopLightMode ? 'border-gray-100 bg-gray-50/60' : 'border-white/[0.08] bg-white/[0.015]'}`}>
                               <div className="p-3 space-y-3">
                                 <div>
                                   <div className={`flex items-center gap-1.5 mb-2 text-[9px] font-bold uppercase tracking-widest ${desktopLightMode ? 'text-gray-500' : 'text-gray-500'}`}>
@@ -14789,7 +16168,7 @@ Output JSON only (no markdown fences):
                                   ) : (
                                     <div className="space-y-1.5">
                                       {agents.map(agent => (
-                                        <div key={agent.artifactId} className={`rounded-xl border px-3 py-2 ${desktopLightMode ? 'bg-white border-gray-100' : 'bg-white/[0.04] border-white/8'}`}>
+                                        <div key={agent.artifactId} className={`rounded-xl border px-3 py-2 ${desktopLightMode ? 'bg-white border-gray-100' : 'bg-white/[0.04] border-white/[0.08]'}`}>
                                           <div className="flex items-center gap-2 min-w-0">
                                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
                                             <span className={`text-[11px] font-semibold truncate ${desktopLightMode ? 'text-gray-800' : 'text-gray-200'}`}>{agent.manifest?.name || agent.title}</span>
@@ -14817,7 +16196,7 @@ Output JSON only (no markdown fences):
                                         const meta = desktopBusMetaRef.current[k];
                                         const subCount = desktopBusSubscribersRef.current[k]?.size || 0;
                                         return (
-                                          <div key={k} className={`rounded-xl border px-3 py-2 ${desktopLightMode ? 'bg-white border-gray-100' : 'bg-white/[0.04] border-white/8'}`}>
+                                          <div key={k} className={`rounded-xl border px-3 py-2 ${desktopLightMode ? 'bg-white border-gray-100' : 'bg-white/[0.04] border-white/[0.08]'}`}>
                                             <div className="flex items-center gap-2 min-w-0">
                                               <span className={`text-[10px] font-mono truncate flex-1 ${desktopLightMode ? 'text-violet-700' : 'text-violet-300'}`}>{k}</span>
                                               {subCount > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400">{subCount}</span>}
@@ -14850,7 +16229,7 @@ Output JSON only (no markdown fences):
                                   ) : (
                                     <div className="space-y-2">
                                       {runs.map(run => (
-                                        <div key={run.id} className={`rounded-xl border p-3 ${desktopLightMode ? 'border-gray-100 bg-gray-50/70' : 'border-white/8 bg-white/[0.035]'}`}>
+                                        <div key={run.id} className={`rounded-xl border p-3 ${desktopLightMode ? 'border-gray-100 bg-gray-50/70' : 'border-white/[0.08] bg-white/[0.035]'}`}>
                                           <div className="flex items-start gap-2">
                                             <div className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center border ${statusClass(run.status)}`}>
                                               {run.status === 'success' ? <CheckIcon className="w-3 h-3" /> : run.status === 'error' ? <AlertTriangleIcon className="w-3 h-3" /> : run.status === 'skipped' ? <SquareIcon className="w-3 h-3" /> : <PlayIcon className="w-3 h-3" />}
@@ -14910,6 +16289,20 @@ Output JSON only (no markdown fences):
                     })()}
                   </AnimatePresence>
 
+                  <AnimatePresence>
+                    <ArtifactRelationshipPanel
+                      isOpen={showRelationshipPanel}
+                      onClose={() => setShowRelationshipPanel(false)}
+                      artifacts={desktopArtifacts}
+                      connections={desktopConnections}
+                      stacks={desktopStacks}
+                      busKeys={Object.keys(desktopBusStateRef.current)}
+                      desktopLightMode={desktopLightMode}
+                      onFocusArtifact={handleFocusArtifact}
+                      onRemoveConnection={handleRemoveConnection}
+                    />
+                  </AnimatePresence>
+
                   <JobCenterPanel
                     jobs={generationJobs}
                     isOpen={showJobCenter}
@@ -14965,7 +16358,15 @@ Output JSON only (no markdown fences):
                 </div>
               </div>
 
-              <div className="flex-1 relative z-10" style={{ overflow: 'clip', isolation: 'isolate' }} ref={desktopContainerRef}>
+              <div
+                className="flex-1 relative z-10"
+                style={{ overflow: 'clip', isolation: 'isolate' }}
+                ref={desktopContainerRef}
+                onDragEnter={handleDesktopDragEnter}
+                onDragOver={handleDesktopDragOver}
+                onDragLeave={handleDesktopDragLeave}
+                onDrop={handleDesktopDrop}
+              >
                 {/* Physics Connector Lines Overlay */}
                 {!focusModeArtifactId && (
                   <PhysicsConnectorOverlay
@@ -14986,6 +16387,10 @@ Output JSON only (no markdown fences):
                       desktopLightMode={desktopLightMode}
                     />
                   )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  <DesktopDropOverlay active={desktopDropActive} desktopLightMode={desktopLightMode} />
                 </AnimatePresence>
 
                 {/* Connection mode click overlay */}
@@ -15065,24 +16470,48 @@ Output JSON only (no markdown fences):
 
                 {desktopArtifacts.length === 0 && !isGeneratingDesktopArtifact && (
                   <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        zIndex: 0,
+                        background: desktopLightMode
+                          ? 'linear-gradient(140deg, rgba(255,255,255,0.66), rgba(239,246,255,0.24) 34%, rgba(255,241,242,0.18) 64%, rgba(240,253,250,0.24)), linear-gradient(90deg, rgba(14,165,233,0.10), transparent 30%, rgba(244,114,182,0.10) 70%, rgba(16,185,129,0.08))'
+                          : 'linear-gradient(140deg, rgba(8,13,28,0.18), rgba(14,48,62,0.32) 34%, rgba(47,33,70,0.24) 68%, rgba(21,32,43,0.32)), linear-gradient(90deg, rgba(34,211,238,0.12), transparent 34%, rgba(244,114,182,0.10) 68%, rgba(250,204,21,0.08))',
+                      }}
+                    />
+
+                    <div
+                      className={`absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-[47%] rounded-[34px] border backdrop-blur-3xl md:block ${
+                        desktopLightMode ? 'border-white/70 bg-white/30' : 'border-white/10 bg-white/[0.035]'
+                      }`}
+                      style={{
+                        zIndex: 2,
+                        width: 'min(88vw, 980px)',
+                        height: 'min(58vh, 560px)',
+                        boxShadow: desktopLightMode
+                          ? '0 36px 120px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255,255,255,0.8)'
+                          : '0 42px 140px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.08)',
+                      }}
+                    />
+
                     {/* === GHOST DEMO TILES — Animated shadows showing capabilities === */}
                     {[
-                      { id: 'ghost-research', x: '5%', y: '8%', w: 280, h: 200, delay: 0, icon: SearchIcon, label: 'Live Research', sublabel: 'Perplexity Web Data', color: 'from-indigo-500/8 to-blue-500/8', borderColor: 'border-indigo-500/10', iconColor: 'text-indigo-400/40', accentBar: 'bg-indigo-500/20' },
-                      { id: 'ghost-image', x: '68%', y: '5%', w: 240, h: 240, delay: 1.5, icon: ImageIcon, label: 'AI Image', sublabel: 'Generated Artwork', color: 'from-pink-500/8 to-rose-500/8', borderColor: 'border-pink-500/10', iconColor: 'text-pink-400/40', accentBar: 'bg-pink-500/20' },
-                      { id: 'ghost-video', x: '38%', y: '3%', w: 300, h: 190, delay: 3, icon: VideoIcon, label: 'AI Video', sublabel: 'Cinematic Loop', color: 'from-fuchsia-500/8 to-violet-500/8', borderColor: 'border-fuchsia-500/10', iconColor: 'text-fuchsia-400/40', accentBar: 'bg-fuchsia-500/20' },
-                      { id: 'ghost-app', x: '12%', y: '45%', w: 320, h: 220, delay: 0.8, icon: LayoutIcon, label: 'Web App', sublabel: 'Interactive Dashboard', color: 'from-violet-500/8 to-purple-500/8', borderColor: 'border-violet-500/10', iconColor: 'text-violet-400/40', accentBar: 'bg-violet-500/20' },
-                      { id: 'ghost-crispr', x: '62%', y: '50%', w: 260, h: 180, delay: 2.2, icon: WandIcon, label: 'CRISPR Edit', sublabel: 'Surgical Modifications', color: 'from-cyan-500/8 to-teal-500/8', borderColor: 'border-cyan-500/10', iconColor: 'text-cyan-400/40', accentBar: 'bg-cyan-500/20' },
-                      { id: 'ghost-chain', x: '82%', y: '38%', w: 200, h: 160, delay: 4, icon: GitBranchIcon, label: 'Chain', sublabel: 'Linked Artifacts', color: 'from-amber-500/8 to-orange-500/8', borderColor: 'border-amber-500/10', iconColor: 'text-amber-400/40', accentBar: 'bg-amber-500/20' },
+                      { id: 'ghost-research', x: '5%', y: '9%', w: 300, h: 208, delay: 0, icon: SearchIcon, label: 'Research', sublabel: 'Signal brief', color: 'from-sky-300/14 via-cyan-300/9 to-emerald-300/12', borderColor: 'border-cyan-200/15', iconColor: 'text-cyan-100/70', accentBar: 'from-cyan-300/35 to-emerald-300/45' },
+                      { id: 'ghost-image', x: '70%', y: '7%', w: 250, h: 240, delay: 1.5, icon: ImageIcon, label: 'Image', sublabel: 'Product world', color: 'from-rose-300/14 via-pink-300/8 to-amber-200/12', borderColor: 'border-rose-200/15', iconColor: 'text-rose-100/70', accentBar: 'from-rose-300/40 to-amber-200/40' },
+                      { id: 'ghost-video', x: '38%', y: '3%', w: 320, h: 188, delay: 3, icon: VideoIcon, label: 'Video', sublabel: 'Motion scene', color: 'from-violet-300/14 via-fuchsia-300/8 to-sky-300/10', borderColor: 'border-violet-200/15', iconColor: 'text-violet-100/70', accentBar: 'from-violet-300/45 to-fuchsia-300/35' },
+                      { id: 'ghost-app', x: '11%', y: '49%', w: 330, h: 220, delay: 0.8, icon: LayoutIcon, label: 'App', sublabel: 'Interactive tool', color: 'from-indigo-300/14 via-blue-300/8 to-cyan-300/10', borderColor: 'border-indigo-200/15', iconColor: 'text-indigo-100/70', accentBar: 'from-indigo-300/40 to-blue-300/35' },
+                      { id: 'ghost-crispr', x: '62%', y: '54%', w: 290, h: 184, delay: 2.2, icon: WandIcon, label: 'Refine', sublabel: 'Focused edits', color: 'from-teal-300/14 via-cyan-300/8 to-lime-200/10', borderColor: 'border-teal-200/15', iconColor: 'text-teal-100/70', accentBar: 'from-teal-300/45 to-lime-200/35' },
+                      { id: 'ghost-chain', x: '83%', y: '41%', w: 210, h: 166, delay: 4, icon: GitBranchIcon, label: 'Chain', sublabel: 'Connected flow', color: 'from-amber-200/14 via-orange-300/8 to-rose-300/10', borderColor: 'border-amber-200/15', iconColor: 'text-amber-100/75', accentBar: 'from-amber-200/45 to-orange-300/35' },
                     ].map((ghost) => {
                       const GhostIcon = ghost.icon;
                       return (
                         <motion.div
                           key={ghost.id}
-                          className="absolute"
+                          className="absolute hidden sm:block"
                           style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
                           initial={{ opacity: 0, scale: 0.9, y: 20 }}
                           animate={{
-                            opacity: [0, 0.6, 0.6, 0.4, 0.6, 0.6, 0],
+                            opacity: [0, 0.82, 0.82, 0.58, 0.76, 0.76, 0],
                             scale: [0.9, 1, 1, 1.02, 1, 1, 0.95],
                             y: [20, 0, 0, -4, 0, 0, 10],
                           }}
@@ -15095,21 +16524,21 @@ Output JSON only (no markdown fences):
                             times: [0, 0.08, 0.3, 0.5, 0.7, 0.92, 1],
                           }}
                         >
-                          <div className={`w-full h-full rounded-xl border ${ghost.borderColor} bg-gradient-to-br ${ghost.color} backdrop-blur-sm overflow-hidden shadow-lg shadow-black/5`}>
-                            <div className={`h-7 flex items-center gap-1.5 px-3 ${desktopLightMode ? 'bg-black/3' : 'bg-white/3'} border-b ${ghost.borderColor}`}>
-                              <div className="w-2 h-2 rounded-full bg-red-400/30" />
-                              <div className="w-2 h-2 rounded-full bg-yellow-400/30" />
-                              <div className="w-2 h-2 rounded-full bg-green-400/30" />
-                              <span className={`text-[8px] font-bold uppercase tracking-widest ml-2 ${desktopLightMode ? 'text-gray-400/50' : 'text-white/20'}`}>{ghost.label}</span>
+                          <div className={`h-full w-full overflow-hidden rounded-2xl border ${ghost.borderColor} bg-gradient-to-br ${ghost.color} backdrop-blur-xl shadow-2xl ${desktopLightMode ? 'shadow-slate-500/10' : 'shadow-black/24'}`}>
+                            <div className={`h-8 flex items-center gap-1.5 px-3 border-b ${desktopLightMode ? 'bg-white/24 border-white/40' : 'bg-white/[0.045] border-white/[0.06]'}`}>
+                              <div className="w-2.5 h-2.5 rounded-full bg-rose-300/55" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-amber-200/55" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-emerald-300/55" />
+                              <span className={`ml-2 text-[9px] font-semibold uppercase ${desktopLightMode ? 'text-slate-500/70' : 'text-white/30'}`}>{ghost.label}</span>
                             </div>
-                            <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-2 ${desktopLightMode ? 'bg-gray-200/30' : 'bg-white/5'}`}>
+                            <div className="relative flex h-[calc(100%-2rem)] flex-col items-center justify-center p-4">
+                              <div className={`mb-3 flex h-14 w-14 items-center justify-center rounded-2xl ${desktopLightMode ? 'bg-white/55 shadow-sm' : 'bg-white/[0.07]'}`}>
                                 <GhostIcon className={`w-6 h-6 ${ghost.iconColor}`} />
                               </div>
-                              <span className={`text-[10px] font-bold ${desktopLightMode ? 'text-gray-500/40' : 'text-white/15'}`}>{ghost.sublabel}</span>
-                              <div className={`absolute bottom-3 left-3 right-3 h-1.5 rounded-full ${ghost.accentBar}`}>
+                              <span className={`text-[11px] font-semibold ${desktopLightMode ? 'text-slate-500/70' : 'text-white/28'}`}>{ghost.sublabel}</span>
+                              <div className={`absolute bottom-4 left-4 right-4 h-1.5 overflow-hidden rounded-full bg-gradient-to-r ${ghost.accentBar}`}>
                                 <motion.div
-                                  className={`h-full rounded-full ${ghost.accentBar.replace('/20', '/50')}`}
+                                  className="h-full rounded-full bg-white/55"
                                   animate={{ width: ['0%', '65%', '100%', '80%'] }}
                                   transition={{ duration: 8, delay: ghost.delay + 1, repeat: Infinity, repeatDelay: 6, ease: 'easeInOut' }}
                                 />
@@ -15124,81 +16553,118 @@ Output JSON only (no markdown fences):
                     <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
                       <motion.line
                         x1="18%" y1="55%" x2="62%" y2="55%"
-                        stroke={desktopLightMode ? 'rgba(139,92,246,0.08)' : 'rgba(139,92,246,0.06)'}
+                        stroke={desktopLightMode ? 'rgba(14,165,233,0.16)' : 'rgba(125,211,252,0.14)'}
                         strokeWidth="1.5"
                         strokeDasharray="6 6"
                         initial={{ pathLength: 0, opacity: 0 }}
-                        animate={{ pathLength: [0, 1, 1, 0], opacity: [0, 0.5, 0.5, 0] }}
+                        animate={{ pathLength: [0, 1, 1, 0], opacity: [0, 0.7, 0.7, 0] }}
                         transition={{ duration: 10, delay: 3, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }}
                       />
                       <motion.line
                         x1="75%" y1="20%" x2="82%" y2="40%"
-                        stroke={desktopLightMode ? 'rgba(236,72,153,0.08)' : 'rgba(236,72,153,0.06)'}
+                        stroke={desktopLightMode ? 'rgba(244,114,182,0.16)' : 'rgba(251,113,133,0.13)'}
                         strokeWidth="1.5"
                         strokeDasharray="6 6"
                         initial={{ pathLength: 0, opacity: 0 }}
-                        animate={{ pathLength: [0, 1, 1, 0], opacity: [0, 0.4, 0.4, 0] }}
+                        animate={{ pathLength: [0, 1, 1, 0], opacity: [0, 0.62, 0.62, 0] }}
                         transition={{ duration: 8, delay: 5, repeat: Infinity, repeatDelay: 6, ease: 'easeInOut' }}
                       />
                     </svg>
 
-                    {/* === EMPTY STATE — Minimal === */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none" style={{ zIndex: 10 }}>
+                    {/* === EMPTY STATE — Launchpad === */}
+                    <div className="absolute inset-0 flex items-center justify-center px-5 py-14 pointer-events-none select-none sm:px-8" style={{ zIndex: 10 }}>
                       <motion.div
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                        className="flex flex-col items-center pointer-events-auto"
-                        style={{ maxWidth: 560 }}
+                        className={`w-full max-w-[780px] overflow-hidden rounded-[30px] border px-5 py-6 pointer-events-auto backdrop-blur-2xl sm:px-7 sm:py-7 ${
+                          desktopLightMode
+                            ? 'border-white/80 bg-white/74 text-slate-950 shadow-2xl shadow-slate-400/18'
+                            : 'border-white/12 bg-slate-950/46 text-white shadow-2xl shadow-black/30'
+                        }`}
                       >
-                        {/* Wordmark */}
-                        <p className={`text-[11px] font-semibold tracking-[0.2em] uppercase mb-6 ${desktopLightMode ? 'text-gray-400' : 'text-white/25'}`}>
-                          Desktop
-                        </p>
+                        <div className="flex flex-col items-center text-center">
+                          <div className={`mb-5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 ${
+                            desktopLightMode
+                              ? 'border-slate-200/80 bg-white/85 text-slate-600 shadow-sm'
+                              : 'border-white/10 bg-white/[0.06] text-white/62'
+                          }`}>
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 via-blue-500 to-rose-400">
+                              <SparklesIcon className="h-3 w-3 text-white" />
+                            </span>
+                            <span className="text-[12px] font-semibold">Desktop Studio</span>
+                          </div>
 
-                        {/* Headline */}
-                        <h2 className={`text-4xl font-bold tracking-tight text-center mb-3 leading-[1.15] ${desktopLightMode ? 'text-gray-900' : 'text-white'}`}>
-                          Build anything with AI
-                        </h2>
-                        <p className={`text-sm text-center mb-10 ${desktopLightMode ? 'text-gray-400' : 'text-white/35'}`}>
-                          Type a prompt above — apps, images, video, research, and more appear as tiles.
-                        </p>
+                          <h2 className={`max-w-[680px] text-[34px] font-semibold leading-[1.08] sm:text-[48px] ${
+                            desktopLightMode ? 'text-slate-950' : 'text-white'
+                          }`}>
+                            What do you want to make today?
+                          </h2>
+                          <p className={`mt-4 max-w-[560px] text-sm leading-6 sm:text-[15px] ${
+                            desktopLightMode ? 'text-slate-500' : 'text-white/66'
+                          }`}>
+                            Start with a rough idea, a polished brief, or one of these launch points.
+                          </p>
+                        </div>
 
                         {/* Suggestion rows */}
-                        <div className="w-full space-y-2">
+                        <div className="mt-7 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
                           {[
-                            { label: 'AI news dashboard', prompt: 'Research the top 5 AI stories today and build a sleek dark-mode news dashboard with headline cards, sentiment badges, and a live-feel layout', icon: SearchIcon, accent: 'from-blue-500 to-cyan-500' },
-                            { label: 'Brand kit + landing page', prompt: 'Generate 4 stunning product images for a premium coffee brand, then build a beautiful landing page with the hero using one of them', icon: ImageIcon, accent: 'from-pink-500 to-rose-500' },
-                            { label: 'Cinematic video + meditation app', prompt: 'Create a cinematic video of aurora borealis over mountains, then build a meditation timer app using the video as a full-screen background', icon: VideoIcon, accent: 'from-violet-500 to-purple-500' },
-                            { label: 'Crypto terminal', prompt: 'Build a real-time cryptocurrency tracking dashboard with price cards, sparkline charts, portfolio allocation donut chart, and a dark terminal aesthetic', icon: ActivityIcon, accent: 'from-emerald-500 to-teal-500' },
+                            { label: 'Market brief', detail: 'Research trends and shape them into a dashboard', prompt: 'Research the top 5 AI stories today and build a sleek dark-mode news dashboard with headline cards, sentiment badges, and a live-feel layout', icon: SearchIcon, accent: 'from-sky-400 to-cyan-500' },
+                            { label: 'Visual launch kit', detail: 'Images, palette, and a polished product page', prompt: 'Generate 4 stunning product images for a premium coffee brand, then build a beautiful landing page with the hero using one of them', icon: ImageIcon, accent: 'from-rose-400 to-amber-400' },
+                            { label: 'Motion moodboard', detail: 'A generated video with an immersive app shell', prompt: 'Create a cinematic video of aurora borealis over mountains, then build a meditation timer app using the video as a full-screen background', icon: VideoIcon, accent: 'from-violet-400 to-fuchsia-500' },
+                            { label: 'Live data cockpit', detail: 'Charts, cards, and alerts for fast decisions', prompt: 'Build a real-time cryptocurrency tracking dashboard with price cards, sparkline charts, portfolio allocation donut chart, and a dark terminal aesthetic', icon: ActivityIcon, accent: 'from-emerald-400 to-teal-500' },
                           ].map((s) => {
                             const Icon = s.icon;
                             return (
                               <button
                                 key={s.label}
                                 onClick={() => handleDesktopSubmit(s.prompt)}
-                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-150 group ${
+                                className={`group relative flex min-h-[94px] w-full items-start gap-3 overflow-hidden rounded-2xl border p-4 text-left transition-all duration-200 ${
                                   desktopLightMode
-                                    ? 'bg-white/60 hover:bg-white border border-gray-200/60 hover:border-gray-300 shadow-sm hover:shadow-md'
-                                    : 'bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12]'
+                                    ? 'border-slate-200/70 bg-white/72 hover:border-slate-300 hover:bg-white hover:shadow-lg hover:shadow-slate-300/20'
+                                    : 'border-white/[0.08] bg-white/[0.045] hover:border-white/[0.18] hover:bg-white/[0.08]'
                                 }`}
                               >
-                                <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${s.accent} flex items-center justify-center flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity`}>
-                                  <Icon className="w-3 h-3 text-white" />
+                                <div className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${s.accent} opacity-60`} />
+                                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${s.accent} shadow-lg shadow-black/10`}>
+                                  <Icon className="h-4 w-4 text-white" />
                                 </div>
-                                <span className={`text-[13px] font-medium ${desktopLightMode ? 'text-gray-600 group-hover:text-gray-900' : 'text-white/40 group-hover:text-white/70'} transition-colors`}>
-                                  {s.label}
-                                </span>
-                                <SendIcon className={`w-3 h-3 ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ${desktopLightMode ? 'text-gray-400' : 'text-white/30'}`} />
+                                <div className="min-w-0 flex-1">
+                                  <div className={`text-[14px] font-semibold ${desktopLightMode ? 'text-slate-900' : 'text-white/86'}`}>
+                                    {s.label}
+                                  </div>
+                                  <div className={`mt-1 text-[12px] leading-5 ${desktopLightMode ? 'text-slate-500' : 'text-white/56'}`}>
+                                    {s.detail}
+                                  </div>
+                                </div>
+                                <SendIcon className={`mt-1 h-4 w-4 flex-shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 ${desktopLightMode ? 'text-slate-400' : 'text-white/38'}`} />
                               </button>
                             );
                           })}
                         </div>
 
-                        {/* Bottom hint */}
-                        <p className={`text-[11px] mt-8 text-center ${desktopLightMode ? 'text-gray-300' : 'text-white/15'}`}>
-                          Press <kbd className={`px-1 py-0.5 rounded text-[10px] font-mono ${desktopLightMode ? 'bg-gray-100 text-gray-500' : 'bg-white/10 text-white/30'}`}>⌘K</kbd> for commands · Open <span className="font-semibold">Scenes</span> for multi-step pipelines
-                        </p>
+                        <div className={`mt-5 flex flex-col items-center justify-between gap-3 rounded-2xl border px-4 py-3 sm:flex-row ${
+                          desktopLightMode
+                            ? 'border-slate-200/70 bg-slate-50/70 text-slate-500'
+                            : 'border-white/[0.07] bg-white/[0.035] text-white/42'
+                        }`}>
+                          <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-medium sm:justify-start">
+                            {['Apps', 'Images', 'Video', 'Research', 'Automation'].map((item) => (
+                              <span key={item} className={`rounded-full px-2.5 py-1 ${
+                                desktopLightMode ? 'bg-white text-slate-500 shadow-sm' : 'bg-white/[0.06] text-white/55'
+                              }`}>
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+                            desktopLightMode ? 'bg-white text-slate-500 shadow-sm' : 'bg-white/[0.06] text-white/55'
+                          }`}>
+                            <SparklesIcon className="h-3.5 w-3.5" />
+                            Ready for rough ideas
+                          </div>
+                        </div>
                       </motion.div>
                     </div>
                   </div>
@@ -15213,6 +16679,7 @@ Output JSON only (no markdown fences):
                     key={artifact.id}
                     artifact={artifact}
                     appProject={appProjectByArtifactId.get(artifact.id) || null}
+                    buildJob={generationJobByArtifactId.get(artifact.id) || null}
                     isCrisprActive={desktopCrisprIds.has(artifact.id)}
                     crisprInput={desktopCrisprInputs[artifact.id] || ''}
                     isCrisprPending={desktopCrisprPendingIds.has(artifact.id)}
@@ -15427,7 +16894,7 @@ Output JSON only (no markdown fences):
                             <p className="text-sm mb-3 leading-relaxed">Manage your generated artifacts just like a real desktop operating system.</p>
                             <ul className="space-y-2 text-sm">
                               <li><strong className={desktopLightMode ? 'text-gray-900' : 'text-white'}>Move:</strong> Click and drag the top title bar of any window.</li>
-                              <li><strong className={desktopLightMode ? 'text-gray-900' : 'text-white'}>Resize:</strong> Drag the bottom-right corner indicator.</li>
+                              <li><strong className={desktopLightMode ? 'text-gray-900' : 'text-white'}>Resize:</strong> Drag any window corner. The bottom-right corner shows the visual handle.</li>
                               <li><strong className={desktopLightMode ? 'text-gray-900' : 'text-white'}>Maximize:</strong> Double-click the title bar to toggle full screen.</li>
                               <li><strong className={desktopLightMode ? 'text-gray-900' : 'text-white'}>Traffic Lights:</strong> Red (Close), Yellow (Minimize to taskbar), Green (Toggle CRISPR editor).</li>
                               <li><strong className={desktopLightMode ? 'text-gray-900' : 'text-white'}>History:</strong> Use the undo/redo arrows in the title bar to revert changes.</li>
@@ -15745,6 +17212,18 @@ Output JSON only (no markdown fences):
                     </motion.div>
                   </motion.div>
                 )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                <WorkspaceMemoryModal
+                  isOpen={showWorkspaceMemoryModal}
+                  onClose={() => setShowWorkspaceMemoryModal(false)}
+                  memory={workspaceMemory}
+                  onChange={persistWorkspaceMemory}
+                  desktopLightMode={desktopLightMode}
+                  artifactCount={desktopArtifacts.length}
+                  connectionCount={desktopConnections.length}
+                />
               </AnimatePresence>
 
               {/* ── Brand Prompt Modal ───────────────────────────────────────── */}
