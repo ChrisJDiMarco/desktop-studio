@@ -103,6 +103,8 @@ import {
 
 const ARTIFACT_SAVE_TIMEOUT_MS = 15000;
 const ARTIFACT_GENERATION_TIMEOUT_MS = 300000;
+const DESKTOP_LIVE_ARTIFACT_LIMIT = 10;
+const DESKTOP_VISIBILITY_MARGIN_PX = 480;
 
 const resolveWithTimeout = (promise, timeoutMs, timeoutValue) => {
   let timeoutId;
@@ -2760,7 +2762,7 @@ function ArtifactWindowInner({
   isCrisprActive, crisprInput, isCrisprPending, crisprStatus,
   isDropdownOpen, isActionsDropdownOpen, isAgencySetup, isAutoActive, isBeautifyActive,
   isConnecting, connectingFromId,
-  desktopLightMode, desktopAutoIterations, desktopAutoWebMode, desktopMaxZ,
+  desktopLightMode, desktopAutoIterations, desktopAutoWebMode, isFrontmost = false,
   desktopDragRef, desktopResizeRef,
   setDesktopCrisprIds, setDesktopCrisprInputs, setDesktopCrisprStatus,
   setDesktopDropdownId, setDesktopActionsDropdownId, setDesktopAgencySetupId,
@@ -2783,12 +2785,14 @@ function ArtifactWindowInner({
   isVisible = true,
 }) {
                   const isMedia = artifact.type === 'image' || artifact.type === 'video';
+                  const shouldMountArtifactRuntime = !artifact.isMinimized && !artifact.isLoading && isVisible;
                   const isAppProjectBuilding = appProject?.status === 'building';
                   const hasReadyAppProject = appProject?.status === 'ready';
                   const hasFailedAppProject = appProject?.status === 'error';
                   // Must be before any conditional return (Rules of Hooks)
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   const safeContent = React.useMemo(() => {
+                    if (isMedia || !shouldMountArtifactRuntime) return '';
                     const c = artifact.content;
                     // Empty, null, or un-hydrated IDB sentinel → dark placeholder with refresh affordance
                     if (!c || (typeof c === 'string' && c.startsWith('idb:'))) {
@@ -2802,15 +2806,16 @@ function ArtifactWindowInner({
                     }
                     const html = addIframeNavGuard(extractHtmlImageDataUrls(c));
                     return isVisualEditMode ? injectVisualEditor(html) : html;
-                  }, [artifact.content, artifact.language, isVisualEditMode]);
+                  }, [artifact.id, artifact.content, artifact.language, isMedia, isVisualEditMode, shouldMountArtifactRuntime]);
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   const iframeRef = useRef(null);
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   const [artifactFontSize, setArtifactFontSize] = useState(100);
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   useEffect(() => {
+                    if (!shouldMountArtifactRuntime) return;
                     iframeRef.current?.contentWindow?.postMessage({ type: 'font-size:set', fontSize: artifactFontSize }, '*');
-                  }, [artifactFontSize]);
+                  }, [artifactFontSize, shouldMountArtifactRuntime]);
                   // Ref + state for the portaled actions dropdown (escapes overflow:hidden clipping)
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   const actionsAnchorRef = useRef(null);
@@ -2868,7 +2873,7 @@ function ArtifactWindowInner({
                   }, [isActionsDropdownOpen]);
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   useEffect(() => {
-                    if (artifact.language !== 'react') return undefined;
+                    if (!shouldMountArtifactRuntime || artifact.language !== 'react') return undefined;
                     setReactRuntimeError(null);
                     const handleMessage = (event) => {
                       if (event.source !== iframeRef.current?.contentWindow) return;
@@ -2894,7 +2899,7 @@ function ArtifactWindowInner({
                     };
                     window.addEventListener('message', handleMessage);
                     return () => window.removeEventListener('message', handleMessage);
-                  }, [artifact.id, artifact.language, artifact.content, artifact.lastCrisprPatch, setDesktopCrisprStatus]);
+                  }, [artifact.id, artifact.language, artifact.content, artifact.lastCrisprPatch, setDesktopCrisprStatus, shouldMountArtifactRuntime]);
 
                   if (isMedia) {
                     const isDraggingThis = desktopDragRef.current?.isDragging && desktopDragRef.current?.artifactId === artifact.id;
@@ -3240,6 +3245,16 @@ function ArtifactWindowInner({
                                 <div className="absolute inset-0 bg-gray-800" />
                               ) : artifact.isLoading ? (
                                 <ArtifactBuildPreview artifact={artifact} desktopLightMode={desktopLightMode} job={buildJob} />
+                              ) : !shouldMountArtifactRuntime ? (
+                                <div
+                                  className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-950 to-gray-900"
+                                  aria-hidden="true"
+                                >
+                                  <div className="flex flex-col items-center gap-2 opacity-55">
+                                    <SparklesIcon className="w-6 h-6 text-cyan-300/60" />
+                                    <span className="text-[10px] font-semibold text-white/40 uppercase tracking-wider">Paused preview</span>
+                                  </div>
+                                </div>
                               ) : artifact.type === 'image' && artifact.mediaUrl ? (
                                 <div
                                   className={`relative w-full h-full ${interactiveMode === 'zoom' ? 'cursor-crosshair' : ''}`}
@@ -3404,7 +3419,7 @@ function ArtifactWindowInner({
                                 </div>
                               )}
 
-                              {artifact.type === 'video' && artifact.mediaUrl && !artifact.isLoading && (
+                              {artifact.type === 'video' && artifact.mediaUrl && !artifact.isLoading && shouldMountArtifactRuntime && (
                                 <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 px-4 py-3 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover/media:opacity-100 transition-opacity duration-200">
                                   <button
                                     onClick={(e) => {
@@ -3927,7 +3942,7 @@ function ArtifactWindowInner({
                             <ArtifactBuildPreview artifact={artifact} desktopLightMode={desktopLightMode} job={buildJob} />
                           ) : (
                             <>
-                              {isVisible ? (
+                              {shouldMountArtifactRuntime ? (
                                 <iframe
                                   key={`iframe-${refreshNonce}`}
                                   ref={iframeRef}
@@ -3951,7 +3966,7 @@ function ArtifactWindowInner({
                               )}
                               <div
                                 className="absolute inset-0 z-10"
-                                style={{ pointerEvents: isVisualEditMode || artifact.zIndex >= desktopMaxZ ? 'none' : 'auto' }}
+                                style={{ pointerEvents: isVisualEditMode || isFrontmost ? 'none' : 'auto' }}
                                 onMouseDown={(e) => {
                                   e.stopPropagation();
                                   handleDesktopBringToFront(artifact.id);
@@ -4342,7 +4357,7 @@ function areArtifactWindowPropsEqual(prev, next) {
     prev.desktopLightMode === next.desktopLightMode &&
     prev.desktopAutoIterations === next.desktopAutoIterations &&
     prev.desktopAutoWebMode === next.desktopAutoWebMode &&
-    prev.desktopMaxZ === next.desktopMaxZ &&
+    prev.isFrontmost === next.isFrontmost &&
     prev.handleReactAutoFix === next.handleReactAutoFix &&
     prev.isVisualEditMode === next.isVisualEditMode &&
     prev.isVisible === next.isVisible
@@ -5409,6 +5424,24 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const [desktopVisibleIds, setDesktopVisibleIds] = useState(() => new Set());
   const desktopVisibleIdsRef = useRef(desktopVisibleIds);
   useEffect(() => { desktopVisibleIdsRef.current = desktopVisibleIds; }, [desktopVisibleIds]);
+  const isArtifactNearDesktopViewport = useCallback((artifact, margin = DESKTOP_VISIBILITY_MARGIN_PX) => {
+    if (!artifact) return false;
+    if (artifact.isMaximized) return true;
+    if (typeof window === 'undefined') return true;
+    const root = desktopContainerRef.current;
+    const viewportW = root?.clientWidth || window.innerWidth || 1200;
+    const viewportH = root?.clientHeight || window.innerHeight || 800;
+    const x = Number.isFinite(artifact.x) ? artifact.x : 0;
+    const y = Number.isFinite(artifact.y) ? artifact.y : 0;
+    const w = Number.isFinite(artifact.width) ? artifact.width : 420;
+    const h = Number.isFinite(artifact.height) ? artifact.height : 320;
+    return (
+      x + w >= -margin &&
+      y + h >= -margin &&
+      x <= viewportW + margin &&
+      y <= viewportH + margin
+    );
+  }, []);
 
   // ─── State Refs (for stable handler closures) ────────────────────────────
   // Pattern: ref always mirrors latest state so useCallback can use [] deps
@@ -6302,6 +6335,64 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
     () => desktopArtifacts.filter(a => !a.isMinimized).sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))[0] || null,
     [desktopArtifacts]
   );
+  const desktopRuntimeIds = useMemo(() => {
+    void desktopAutomationVersion;
+    const importantIds = new Set([
+      frontmostArtifact?.id,
+      focusModeArtifactId,
+      desktopVisualEditId,
+      desktopDropdownId,
+      desktopActionsDropdownId,
+      desktopAgencySetupId,
+      connectingFromId,
+      ...Array.from(desktopCrisprIds || []),
+      ...Array.from(desktopCrisprPendingIds || []),
+      ...Array.from(desktopAutoIds || []),
+      ...Array.from(desktopBeautifyIds || []),
+    ].filter(Boolean));
+
+    for (const run of desktopAgentRunsRef.current || []) {
+      if (!run || ['success', 'error', 'skipped', 'canceled'].includes(run.status)) continue;
+      if (run.targetArtifactId) importantIds.add(run.targetArtifactId);
+      if (run.sourceArtifactId) importantIds.add(run.sourceArtifactId);
+    }
+
+    const byId = new Map(desktopArtifacts.map(artifact => [artifact.id, artifact]));
+    const runtimeIds = new Set();
+    for (const id of importantIds) {
+      const artifact = byId.get(id);
+      if (artifact && !artifact.isMinimized && !artifact.isLoading) runtimeIds.add(id);
+    }
+
+    desktopArtifacts
+      .filter(artifact => (
+        artifact?.id &&
+        !artifact.isMinimized &&
+        !artifact.isLoading &&
+        (desktopVisibleIds.has(artifact.id) || isArtifactNearDesktopViewport(artifact))
+      ))
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
+      .slice(0, DESKTOP_LIVE_ARTIFACT_LIMIT)
+      .forEach(artifact => runtimeIds.add(artifact.id));
+
+    return runtimeIds;
+  }, [
+    connectingFromId,
+    desktopActionsDropdownId,
+    desktopAgencySetupId,
+    desktopArtifacts,
+    desktopAutoIds,
+    desktopAutomationVersion,
+    desktopBeautifyIds,
+    desktopCrisprIds,
+    desktopCrisprPendingIds,
+    desktopDropdownId,
+    desktopVisibleIds,
+    desktopVisualEditId,
+    focusModeArtifactId,
+    frontmostArtifact?.id,
+    isArtifactNearDesktopViewport,
+  ]);
 
   // ─── Persist Functions ──────────────────────────────────────────────────
   const persistDesktopArtifacts = useCallback((updater) => {
@@ -10358,6 +10449,15 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
         .filter(folder => folder.artifactIds.length > 0));
     }
 
+    setDesktopVisibleIds(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (next.delete(id)) changed = true;
+      }
+      return changed ? next : prev;
+    });
+
     setDesktopConnections(prev => {
       const next = prev.filter(conn => !ids.has(conn.fromId) && !ids.has(conn.toId));
       if (next.length === prev.length) return prev;
@@ -10430,6 +10530,14 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
         ? { ...artifact, isMinimized: true, isMaximized: false }
         : artifact
     )));
+    setDesktopVisibleIds(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of artifactIds) {
+        if (next.delete(id)) changed = true;
+      }
+      return changed ? next : prev;
+    });
     setFocusModeArtifactId(current => artifactIds.includes(current) ? null : current);
     setDesktopDropdownId(null);
     setDesktopActionsDropdownId(null);
@@ -10714,6 +10822,12 @@ PLACEMENT RULES:
     if (!target.isMinimized) {
       // Minimize — idempotent. Re-running just keeps it minimized.
       persistDesktopArtifacts(prev => prev.map(a => a.id === artifactId ? { ...a, isMinimized: true, isMaximized: false } : a));
+      setDesktopVisibleIds(prev => {
+        if (!prev.has(artifactId)) return prev;
+        const next = new Set(prev);
+        next.delete(artifactId);
+        return next;
+      });
       setFocusModeArtifactId(current => current === artifactId ? null : current);
       setDesktopDropdownId(current => current === artifactId ? null : current);
       setDesktopActionsDropdownId(current => current === artifactId ? null : current);
@@ -14337,27 +14451,21 @@ Output JSON only (no markdown fences):
     };
   }, []);
 
-  // ─── Force-restore visibility when un-minimizing ─────────────────────────
-  // IntersectionObserver can miss transform-based re-entry (e.g. when the
-  // motion.div animates from y:400 back to y:0 on "Restore All"), leaving the
-  // iframe unmounted and stuck on the sparkle placeholder. Any artifact that
-  // is not minimized is — by definition — on the desktop and should render.
-  // We additively sync the visible set; the observer still removes ids that
-  // scroll out of the rootMargin naturally.
+  // ─── Force-restore near-viewport visibility when un-minimizing ───────────
+  // IntersectionObserver can miss transform-based re-entry (e.g. Restore All).
+  // Keep only nearby open artifacts eligible for live runtimes; minimized and
+  // far-off windows stay as lightweight chrome/placeholders.
   useEffect(() => {
-    const toAdd = [];
-    for (const a of desktopArtifacts) {
-      if (!a.isMinimized && !desktopVisibleIdsRef.current.has(a.id)) {
-        toAdd.push(a.id);
-      }
-    }
-    if (toAdd.length === 0) return;
     setDesktopVisibleIds(prev => {
-      const next = new Set(prev);
-      for (const id of toAdd) next.add(id);
+      const next = new Set();
+      for (const artifact of desktopArtifacts) {
+        if (!artifact?.id || artifact.isMinimized) continue;
+        if (isArtifactNearDesktopViewport(artifact)) next.add(artifact.id);
+      }
+      if (next.size === prev.size && Array.from(next).every(id => prev.has(id))) return prev;
       return next;
     });
-  }, [desktopArtifacts]);
+  }, [desktopArtifacts, isArtifactNearDesktopViewport]);
 
   // ─── Defensive: clear stuck drag/resize body classes ──────────────────
   // If the user releases the mouse outside the browser window during a drag
@@ -17670,7 +17778,7 @@ Output JSON only (no markdown fences):
                     desktopLightMode={desktopLightMode}
                     desktopAutoIterations={desktopAutoIterations}
                     desktopAutoWebMode={desktopAutoWebMode}
-                    desktopMaxZ={desktopMaxZ}
+                    isFrontmost={frontmostArtifact?.id === artifact.id}
                     desktopDragRef={desktopDragRef}
                     desktopResizeRef={desktopResizeRef}
                     setDesktopCrisprIds={setDesktopCrisprIds}
@@ -17712,7 +17820,7 @@ Output JSON only (no markdown fences):
                     updateRecentGenerations={updateRecentGenerations}
                     toast={toast}
                     isVisualEditMode={desktopVisualEditId === artifact.id}
-                    isVisible={desktopVisibleIds.has(artifact.id)}
+                    isVisible={desktopRuntimeIds.has(artifact.id)}
                     onToggleVisualEdit={() => {
                       const isExiting = desktopVisualEditId === artifact.id;
                       if (isExiting) {
