@@ -9,7 +9,7 @@ import { serializeArtifacts, hydrateArtifacts, deleteArtifactData, pruneOrphans,
 import { COMPOSIO_TEMPLATES } from '@/lib/composio-templates';
 import { addIframeNavGuard, buildThinkletHtml, injectVisualEditor, extractHtmlImageDataUrls } from '@/components/desktop/artifact-runtime';
 import { DESKTOP_STUDIO_ACTIONS } from '@/components/desktop/studio-actions';
-import { DESKTOP_COMBO_PROMPTS } from '@/components/desktop/scenes';
+import { DESKTOP_COMBO_PROMPTS, SCENE_AUDIENCE_CATEGORIES, THINKLET_CAPABILITY_CONTEXT, THINKLET_SCENE_CREATION_GUIDE, THINKLET_SCENES_AUDIENCE } from '@/components/desktop/scenes';
 import { JobCenterPanel } from '@/components/desktop/job-center';
 import { CommandPalette } from '@/components/desktop/command-palette';
 import { ArtifactVersionsPanel } from '@/components/desktop/artifact-versions';
@@ -44,27 +44,45 @@ import {
   ChevronUpIcon,
   ActivityIcon,
   AlertTriangleIcon,
+  BarChart3Icon,
+  BookOpenIcon,
+  BoxesIcon,
+  BriefcaseIcon,
+  Building2Icon,
+  CalendarIcon,
   ClockIcon,
   TrashIcon,
   ZapIcon,
   FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
   WandIcon,
   ImageIcon,
   VideoIcon,
   BrainIcon,
+  DatabaseIcon,
+  EyeIcon,
   NetworkIcon,
   FlaskConicalIcon,
   ScanIcon,
   MicIcon,
   LayersIcon,
+  GraduationCapIcon,
+  HandshakeIcon,
+  HeartIcon,
   ServerIcon,
   ComponentIcon,
   GitBranchIcon,
+  LineChartIcon,
+  MailIcon,
+  MegaphoneIcon,
   PlayIcon,
   SquareIcon,
   PaperclipIcon,
+  PenToolIcon,
   TargetIcon,
   ShieldIcon,
+  ShieldCheckIcon,
   SendIcon,
   HelpCircleIcon,
   DownloadIcon,
@@ -74,7 +92,13 @@ import {
   ZoomOutIcon,
   MaximizeIcon,
   MinimizeIcon,
-  UploadIcon
+  RocketIcon,
+  ShoppingBagIcon,
+  UploadIcon,
+  UsersIcon,
+  WorkflowIcon,
+  WrenchIcon,
+  CircuitBoardIcon
 } from 'lucide-react';
 
 
@@ -1679,11 +1703,147 @@ const DockTile = React.memo(({ artifact, onRestore, onClose, dark }) => {
 });
 DockTile.displayName = 'DockTile';
 
+const DockSceneFolder = React.memo(({ folder, onRestore, onClose, dark }) => {
+  const hue = useMemo(() => __dockHueFor(folder.id), [folder.id]);
+  const tileRef = useRef(null);
+  const [tooltipPos, setTooltipPos] = useState(null);
+  const artifacts = folder.artifacts || [];
+  const count = folder.artifactCount || artifacts.length;
+
+  const showTooltip = useCallback(() => {
+    const el = tileRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const halfMaxW = 150;
+    const padding = 10;
+    const minX = halfMaxW + padding;
+    const maxX = (typeof window !== 'undefined' ? window.innerWidth : 1200) - halfMaxW - padding;
+    const cx = Math.max(minX, Math.min(maxX, r.left + r.width / 2));
+    setTooltipPos({ x: cx, y: r.top });
+  }, []);
+  const hideTooltip = useCallback(() => setTooltipPos(null), []);
+
+  return (
+    <div
+      className="relative flex flex-col items-center group flex-shrink-0"
+      onPointerEnter={showTooltip}
+      onPointerLeave={hideTooltip}
+    >
+      {tooltipPos && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltipPos.x,
+            top: tooltipPos.y - 14,
+            transform: 'translate(-50%, -100%)',
+            background: dark ? 'rgba(15,17,22,0.96)' : 'rgba(255,255,255,0.98)',
+            color: dark ? '#fff' : '#0f172a',
+            border: dark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(0,0,0,0.08)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+            padding: '5px 10px',
+            borderRadius: 8,
+            fontSize: 11,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            maxWidth: 300,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            pointerEvents: 'none',
+            zIndex: 999999,
+          }}
+        >
+          {folder.title || 'Scene Folder'} · {count} artifact{count === 1 ? '' : 's'}
+        </div>,
+        document.body,
+      )}
+
+      <button
+        ref={tileRef}
+        type="button"
+        onClick={(e) => {
+          if (e.button !== undefined && e.button !== 0) return;
+          onRestore(folder.id);
+        }}
+        className="dock-tile relative w-12 h-11 cursor-pointer block bg-transparent border-0 p-0"
+        style={{ outline: 'none' }}
+        aria-label={`Restore ${folder.title || 'scene folder'}`}
+      >
+        <span
+          className="dock-tile-visual absolute inset-0 rounded-2xl overflow-hidden flex items-center justify-center transition-transform duration-200 ease-out group-hover:-translate-y-2.5 group-hover:scale-[1.18] will-change-transform"
+          style={{
+            background: `linear-gradient(135deg, hsl(${hue} 72% 62%), hsl(${(hue + 42) % 360} 76% 48%))`,
+            boxShadow: dark
+              ? '0 0 0 1px rgba(255,255,255,0.12) inset'
+              : '0 0 0 1px rgba(255,255,255,0.56) inset',
+          }}
+        >
+          <span className="absolute inset-0 bg-black/10" />
+          {artifacts.slice(0, 3).map((artifact, index) => {
+            const isImage = artifact.type === 'image' && artifact.mediaUrl;
+            const isVideo = artifact.type === 'video';
+            const PreviewIcon = isImage ? null : isVideo ? VideoIcon : LayoutIcon;
+            return (
+              <span
+                key={artifact.id}
+                className="absolute h-6 w-7 rounded-lg border border-white/35 bg-white/15 shadow-md overflow-hidden"
+                style={{
+                  left: 9 + index * 5,
+                  top: 9 - index * 2,
+                  transform: `rotate(${(index - 1) * 7}deg)`,
+                  backgroundImage: isImage ? `url(${artifact.mediaUrl})` : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+                {PreviewIcon && (
+                  <span className="flex h-full w-full items-center justify-center">
+                    <PreviewIcon className="h-3.5 w-3.5 text-white/90" />
+                  </span>
+                )}
+              </span>
+            );
+          })}
+          <FolderIcon className="absolute bottom-1.5 left-1.5 h-4 w-4 text-white drop-shadow-md" strokeWidth={2.4} />
+          <span className="absolute bottom-1.5 right-1.5 rounded-full bg-black/30 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+            {count}
+          </span>
+          <span
+            className="absolute inset-x-0 top-0 h-1/2 pointer-events-none"
+            style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.34), rgba(255,255,255,0))' }}
+          />
+        </span>
+      </button>
+
+      <span
+        className="mt-1 h-1 w-4 rounded-full"
+        style={{ background: dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.42)' }}
+      />
+
+      {onClose && (
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(folder.id); }}
+          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 hover:bg-red-400 flex items-center justify-center shadow-md ring-2 opacity-0 group-hover:opacity-100 transition-opacity duration-100"
+          style={{ ['--tw-ring-color']: dark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)' }}
+          title="Close scene folder"
+          aria-label={`Close ${folder.title || 'scene folder'}`}
+        >
+          <XIcon className="w-2.5 h-2.5 text-white" strokeWidth={3.5} />
+        </button>
+      )}
+    </div>
+  );
+});
+DockSceneFolder.displayName = 'DockSceneFolder';
+
 const DesktopDock = React.memo(({
+  sceneFolders = [],
   artifacts,
   totalArtifacts,
   onRestore,
   onClose,
+  onRestoreSceneFolder,
+  onCloseSceneFolder,
   desktopLightMode,
   taskbarRef,
   overflowing,
@@ -1716,6 +1876,21 @@ const DesktopDock = React.memo(({
           className="flex items-end gap-1.5 max-w-[60vw] min-w-0"
           style={{ overflowX: 'clip', overflowY: 'visible' }}
         >
+          {sceneFolders.map((folder) => (
+            <DockSceneFolder
+              key={folder.id}
+              folder={folder}
+              onRestore={onRestoreSceneFolder}
+              onClose={onCloseSceneFolder}
+              dark={dark}
+            />
+          ))}
+          {sceneFolders.length > 0 && artifacts.length > 0 && (
+            <span
+              className="mb-2.5 mx-1 h-7 w-px flex-shrink-0"
+              style={{ background: dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)' }}
+            />
+          )}
           {artifacts.map((a) => (
             <DockTile key={a.id} artifact={a} onRestore={onRestore} onClose={onClose} dark={dark} />
           ))}
@@ -1723,7 +1898,7 @@ const DesktopDock = React.memo(({
 
         {/* Overflow indicator — shows full grid in a dropup when more
             artifacts are minimized than fit in a single dock row. */}
-        {overflowing && (
+        {overflowing && (sceneFolders.length + artifacts.length > 1) && (
           <div className="relative flex-shrink-0 self-center" ref={dropupRef}>
             <button
               onClick={() => setDropupOpen(!dropupOpen)}
@@ -1737,7 +1912,7 @@ const DesktopDock = React.memo(({
               title="Show all minimized"
             >
               <LayersIcon className="w-3.5 h-3.5" />
-              <span>{artifacts.length}</span>
+              <span>{sceneFolders.length + artifacts.length}</span>
               <ChevronUpIcon className={`w-3 h-3 transition-transform ${dropupOpen ? 'rotate-180' : ''}`} />
             </button>
             <AnimatePresence>
@@ -1755,9 +1930,38 @@ const DesktopDock = React.memo(({
                 >
                   <div className="px-3 py-1.5 mb-1">
                     <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.45)' }}>
-                      Minimized · {artifacts.length}
+                      Minimized · {sceneFolders.length + artifacts.length}
                     </span>
                   </div>
+                  {sceneFolders.length > 0 && (
+                    <div className="px-3 pb-2 space-y-1.5">
+                      {sceneFolders.map(folder => (
+                        <button
+                          key={folder.id}
+                          onClick={() => { onRestoreSceneFolder(folder.id); setDropupOpen(false); }}
+                          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-colors"
+                          style={{
+                            background: dark ? 'rgba(255,255,255,0.055)' : 'rgba(15,23,42,0.045)',
+                            color: dark ? '#fff' : '#0f172a',
+                          }}
+                          title={folder.title || 'Scene Folder'}
+                        >
+                          <span
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-white"
+                            style={{
+                              background: `linear-gradient(135deg, hsl(${__dockHueFor(folder.id)} 72% 62%), hsl(${(__dockHueFor(folder.id) + 42) % 360} 76% 48%))`,
+                            }}
+                          >
+                            <FolderOpenIcon className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[11px] font-semibold">{folder.title || 'Scene Folder'}</span>
+                            <span className="block text-[9px] opacity-55">{folder.artifactCount || folder.artifacts?.length || 0} artifacts</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="grid grid-cols-5 gap-1.5 px-3 pb-2">
                     {artifacts.map((a) => (
                       <button
@@ -4489,7 +4693,7 @@ export default function PromptVault({ content, updateContent, initialDesktopMode
           }
           return { ...a, isLoading: false };
         })
-        .filter(isResolved);
+        .filter(a => isResolved(a) && !deletedDesktopArtifactIdsRef.current.has(a.id));
 
       setDesktopArtifacts(clean);
       // CRITICAL ORDERING: only flip the hydrated flag AFTER setDesktopArtifacts
@@ -4955,8 +5159,10 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const desktopSettingsRef = useRef(null);
   const desktopComboRef = useRef(null);
   const [isDesktopComboOpen, setIsDesktopComboOpen] = useState(false);
+  const [desktopSceneAudienceFilter, setDesktopSceneAudienceFilter] = useState('all');
   const [desktopSceneFilter, setDesktopSceneFilter] = useState('all');
   const [desktopSavedScenes, setDesktopSavedScenes] = useState(() => content?.desktopSavedScenes || []);
+  const [desktopSceneFolders, setDesktopSceneFolders] = useState(() => content?.desktopSceneFolders || []);
   const [hiddenScenes, setHiddenScenes] = useState(() => content?.hiddenScenes || []);
   const [isDesktopInputFocused, setIsDesktopInputFocused] = useState(false);
   const [isDesktopHelpOpen, setIsDesktopHelpOpen] = useState(false);
@@ -4966,6 +5172,28 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   const desktopDocInputRef = useRef(null);
   const desktopImportInputRef = useRef(null);
   const desktopInputRef = useRef(null);
+
+  const persistDesktopSceneFolders = useCallback((updater) => {
+    setDesktopSceneFolders(prev => {
+      const rawNext = typeof updater === 'function' ? updater(prev) : updater;
+      const seen = new Set();
+      const next = (Array.isArray(rawNext) ? rawNext : [])
+        .map(folder => ({
+          ...folder,
+          artifactIds: Array.isArray(folder?.artifactIds)
+            ? [...new Set(folder.artifactIds.filter(Boolean))]
+            : [],
+        }))
+        .filter(folder => {
+          if (!folder?.id || folder.artifactIds.length === 0 || seen.has(folder.id)) return false;
+          seen.add(folder.id);
+          return true;
+        })
+        .slice(0, 24);
+      updateContentRef.current(TQL.set('desktopSceneFolders', next));
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const collapsePrompt = () => setIsDesktopInputFocused(false);
@@ -5161,6 +5389,7 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
   // ─── State Refs (for stable handler closures) ────────────────────────────
   // Pattern: ref always mirrors latest state so useCallback can use [] deps
   const desktopArtifactsRef         = useRef(desktopArtifacts);
+  const deletedDesktopArtifactIdsRef = useRef(new Set());
   // Mirror the hydration flag in a ref so the save path can read it without
   // re-creating its useCallback on every render. This is the gate that
   // prevents an empty-array save from clobbering the localStorage stubs in
@@ -5907,8 +6136,47 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
 
   // ─── Derived State Memos ────────────────────────────────────────────────
   const minimizedArtifacts = useMemo(() => desktopArtifacts.filter(a => a.isMinimized), [desktopArtifacts]);
+  const activeSceneFolders = useMemo(() => {
+    const artifactById = new Map(desktopArtifacts.map(artifact => [artifact.id, artifact]));
+    return desktopSceneFolders
+      .map(folder => {
+        const allArtifacts = (folder.artifactIds || [])
+          .map(id => artifactById.get(id))
+          .filter(Boolean);
+        const minimizedFolderArtifacts = allArtifacts.filter(artifact => artifact.isMinimized);
+        return {
+          ...folder,
+          artifacts: minimizedFolderArtifacts,
+          artifactCount: allArtifacts.length,
+        };
+      })
+      .filter(folder => folder.artifacts.length > 0);
+  }, [desktopArtifacts, desktopSceneFolders]);
+  const sceneFolderArtifactIds = useMemo(() => {
+    const ids = new Set();
+    activeSceneFolders.forEach(folder => {
+      folder.artifacts.forEach(artifact => ids.add(artifact.id));
+    });
+    return ids;
+  }, [activeSceneFolders]);
+  const dockArtifacts = useMemo(
+    () => minimizedArtifacts.filter(artifact => !sceneFolderArtifactIds.has(artifact.id)),
+    [minimizedArtifacts, sceneFolderArtifactIds]
+  );
+  const dockItemCount = activeSceneFolders.length + dockArtifacts.length;
   const openArtifactsCount = useMemo(() => desktopArtifacts.filter(a => !a.isMinimized).length, [desktopArtifacts]);
   const loadingArtifactsCount = useMemo(() => desktopArtifacts.filter(a => a.isLoading).length, [desktopArtifacts]);
+  const featuredHomeScenes = useMemo(() => {
+    const preferredIds = [
+      'founder-launch-room',
+      'campaign-war-room',
+      'executive-command-center',
+      'personal-command-center',
+    ];
+    return preferredIds
+      .map(id => DESKTOP_COMBO_PROMPTS.find(scene => scene.id === id))
+      .filter(Boolean);
+  }, []);
   const activeGenerationJobsCount = useMemo(
     () => generationJobs.filter(job => job.status === 'running' || job.status === 'queued').length,
     [generationJobs]
@@ -6045,7 +6313,8 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
         for (const a of rawNext) {
           if (a && a.id) seen.set(a.id, a);
         }
-        return Array.from(seen.values());
+        return Array.from(seen.values())
+          .filter(a => !deletedDesktopArtifactIdsRef.current.has(a.id));
       })() : rawNext;
       desktopArtifactsRef.current = next;
       // Same hydration guard — block any persist round-trip until IDB
@@ -7702,7 +7971,7 @@ Rules:
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
-  }, [minimizedArtifacts.length]);
+  }, [dockItemCount]);
 
   // ─── Generate Desktop Artifact Mutation ─────────────────────────────────
   const { mutate: generateDesktopArtifact, isPending: isGeneratingDesktopArtifact } = useMutation({
@@ -10061,10 +10330,93 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
   }, []);
 
   // ─── Close / Merge / Minimize / Maximize ────────────────────────────────
+  const handleRestoreAllDesktopArtifacts = useCallback(() => {
+    persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: false })));
+    persistDesktopSceneFolders([]);
+    setDesktopTaskbarDropupOpen(false);
+  }, [persistDesktopArtifacts, persistDesktopSceneFolders]);
+
+  const handleCollapseDesktopToSceneFolder = useCallback(() => {
+    const artifacts = (desktopArtifactsRef.current || []).filter(artifact => artifact?.id);
+    if (artifacts.length === 0) {
+      toast({ title: 'Nothing to collapse', description: 'Create a few artifacts and they can become a scene folder.' });
+      return;
+    }
+
+    const artifactIds = artifacts.map(artifact => artifact.id);
+    const now = Date.now();
+    const titleSeed = artifacts
+      .filter(artifact => !artifact.isMinimized)
+      .sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))[0]
+      || artifacts[artifacts.length - 1];
+    const folder = {
+      id: `scene-folder-${now}-${Math.random().toString(36).slice(2, 6)}`,
+      title: artifacts.length === 1
+        ? `${titleSeed?.title || 'Scene'} Folder`
+        : `Scene Folder · ${artifacts.length} artifacts`,
+      artifactIds,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    persistDesktopSceneFolders(prev => [
+      folder,
+      ...prev
+        .map(existing => ({
+          ...existing,
+          artifactIds: (existing.artifactIds || []).filter(id => !artifactIds.includes(id)),
+        }))
+        .filter(existing => existing.artifactIds.length > 0),
+    ]);
+    persistDesktopArtifacts(prev => prev.map(artifact => (
+      artifactIds.includes(artifact.id)
+        ? { ...artifact, isMinimized: true, isMaximized: false }
+        : artifact
+    )));
+    setDesktopTaskbarDropupOpen(false);
+    toast({
+      title: 'Scene collapsed',
+      description: `${artifacts.length} artifact${artifacts.length === 1 ? '' : 's'} tucked into one dock folder.`,
+    });
+  }, [persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
+
+  const handleRestoreSceneFolder = useCallback((folderId) => {
+    const folder = desktopSceneFolders.find(item => item.id === folderId);
+    if (!folder) return;
+    const ids = new Set(folder.artifactIds || []);
+    persistDesktopArtifacts(prev => prev.map(artifact => (
+      ids.has(artifact.id)
+        ? { ...artifact, isMinimized: false, isMaximized: false }
+        : artifact
+    )));
+    persistDesktopSceneFolders(prev => prev.filter(item => item.id !== folderId));
+    setDesktopTaskbarDropupOpen(false);
+    toast({ title: 'Scene restored', description: folder.title || 'Your artifacts are back on the desktop.' });
+  }, [desktopSceneFolders, persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
+
+  const handleCloseSceneFolder = useCallback((folderId) => {
+    const folder = desktopSceneFolders.find(item => item.id === folderId);
+    if (!folder) return;
+    const ids = new Set(folder.artifactIds || []);
+    ids.forEach(id => deletedDesktopArtifactIdsRef.current.add(id));
+    persistDesktopArtifacts(prev => prev.filter(artifact => !ids.has(artifact.id)));
+    ids.forEach(id => deleteArtifactData(id).catch(() => {}));
+    persistDesktopSceneFolders(prev => prev.filter(item => item.id !== folderId));
+    setDesktopTaskbarDropupOpen(false);
+    toast({ title: 'Scene closed', description: `${ids.size} artifact${ids.size === 1 ? '' : 's'} removed from the dock.` });
+  }, [desktopSceneFolders, persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
+
   const handleDesktopCloseArtifact = useCallback((artifactId) => {
+    deletedDesktopArtifactIdsRef.current.add(artifactId);
     persistDesktopArtifacts(prev => prev.filter(a => a.id !== artifactId));
+    persistDesktopSceneFolders(prev => prev
+      .map(folder => ({
+        ...folder,
+        artifactIds: (folder.artifactIds || []).filter(id => id !== artifactId),
+      }))
+      .filter(folder => folder.artifactIds.length > 0));
     deleteArtifactData(artifactId).catch(() => {});
-  }, [persistDesktopArtifacts]);
+  }, [persistDesktopArtifacts, persistDesktopSceneFolders]);
 
   const escapeHtmlAttribute = useCallback((value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -10285,6 +10637,12 @@ PLACEMENT RULES:
 
     // Restore — idempotent. Re-running keeps the artifact open at the
     // already-clamped position.
+    persistDesktopSceneFolders(prev => prev
+      .map(folder => ({
+        ...folder,
+        artifactIds: (folder.artifactIds || []).filter(id => id !== artifactId),
+      }))
+      .filter(folder => folder.artifactIds.length > 0));
     const canvas = desktopContainerRef.current;
     const canvasH = canvas?.clientHeight || (window.innerHeight - 76);
     const canvasW = canvas?.clientWidth || window.innerWidth;
@@ -10303,7 +10661,7 @@ PLACEMENT RULES:
     // Sync DOM zIndex immediately for snappy stacking.
     const el = document.querySelector(`[data-artifact-id="${artifactId}"]`);
     if (el) el.style.zIndex = String(newZ);
-  }, [persistDesktopArtifacts, persistDesktopMaxZ, desktopMaxZ]);
+  }, [persistDesktopArtifacts, persistDesktopMaxZ, persistDesktopSceneFolders, desktopMaxZ]);
 
   // Toggle maximize. Reads the current committed state from the ref and
   // dispatches one of two *idempotent* updates — exactly the same pattern
@@ -11326,6 +11684,9 @@ APP TYPE: Desktop App / Tool / Widget
 ${__researchSection}${__imgMapSection}
 ${tTypeGuide}
 
+THINKLET CAPABILITIES AVAILABLE:
+${THINKLET_CAPABILITY_CONTEXT}
+
 PLATFORM RULES (CRITICAL — read carefully):
 - Export style: define a function named EXACTLY \`App\` — NEVER use export/import or export default
 - React globals: use React.useState, React.useEffect, React.useRef, React.useCallback, React.useMemo directly
@@ -11851,24 +12212,32 @@ Output ONLY the complete HTML document. Start with <!DOCTYPE html> and end with 
         if (a.mediaUrl) parts.push(`URL: ${__plannerSwap(a.mediaUrl)}`);
         return parts.join(' | ');
       }).join('\n');
+      const scenePlannerCapabilities = `${THINKLET_SCENE_CREATION_GUIDE}
+
+${THINKLET_CAPABILITY_CONTEXT}`;
 
       const plannerPrompt = `You are an AI execution planner for a desktop workspace. Analyze the user request and return the optimal multi-step plan.
 
 TODAY: ${getCurrentDateString()}
 USER REQUEST: "${prompt}"
 ${artifactCtx ? `\nEXISTING ARTIFACTS ON DESKTOP (user may reference these):\n${artifactCtx}\nCRITICAL ISOLATION RULE: ONLY populate referencedImageUrls or referencedVideoUrls if the user EXPLICITLY asks to use them (e.g., "use the images on my desk", "put that video in a page", "use those"). Do NOT automatically pull in existing desktop artifacts if the user just asks for "a landing page" or a new app. Keep independent requests isolated.\n` : ''}
+SCENE / THINKLET CAPABILITY CONTEXT:
+${scenePlannerCapabilities}
+
 Return JSON only:
 {
-  "steps": ["research","image"] | ["image"] | ["video"] | ["build"] | ["research"] | ["chat"],
+  "steps": ["research","image"] | ["image"] | ["video"] | ["build"] | ["research"] | ["chat"] | ["scene"],
   "researchQuery": "search query for Perplexity if research is needed",
   "researchQueries": ["array of DISTINCT research queries when user wants MULTIPLE topics researched in parallel, OR asks for comprehensive/multi-step research"],
   "researchModel": "sonar" | "sonar-pro" | "sonar-reasoning" | "sonar-reasoning-pro" | "sonar-deep-research",
   "finalAction": "image"|"video"|"build"|"chat"|"research"|"multi-image"|"sequential"|"wire"|"schedule",
+  "artifactKind": "html|thinklet when finalAction is build",
+  "scenePlan": {"title":"scene title","intent":"what the workspace helps the user do","windows":[{"title":"window title","kind":"html|thinklet|research|image|video|audio","purpose":"why this belongs in the scene","capabilities":["TQL","aiApi.generate","useFileImport"],"integrations":["Gmail","Slack"]}]},
   "imageDescription": "detailed image generation prompt if making an image",
   "imagePrompts": ["array of DISTINCT prompts for multi-image — each ONE scene"],
   "imageCount": 1,
   "videoDescription": "cinematic video scene description if making video",
-  "subActions": [{"action":"video|image|multi-image|build","count":1,"imageCount":1,"prompt":"specific prompt for this step","imageSpecs":[{"role":"hero","section":"hero-banner","prompt":"slot-specific image prompt","aspectRatio":"16:9"}]}],
+  "subActions": [{"action":"video|image|multi-image|build","artifactKind":"html|thinklet","title":"specific window title","count":1,"imageCount":1,"prompt":"specific prompt for this step","imageSpecs":[{"role":"hero","section":"hero-banner","prompt":"slot-specific image prompt","aspectRatio":"16:9"}]}],
   "referencedImageUrls": ["URLs from existing artifacts the user wants to use"],
   "referencedVideoUrls": ["URLs from existing artifacts"],
   "wireSource": "title or description of the Thinklet that publishes data (for wire action)",
@@ -11911,6 +12280,18 @@ If the user asks for MULTIPLE distinct items (e.g., "A logo, a storefront, a vid
 - For a grid of 6 posts = {"action": "multi-image", "imageCount": 6, "prompt": "..."}.
 - If the user asks for a broad concept without listing steps (e.g., "Create everything I need for a new brand"), INFER the necessary assets (e.g., 1 logo image, 1 landing page build, 1 promo video) and create a comprehensive sequential plan.
 - Order matters: Generate images and videos FIRST so their URLs can be injected into subsequent "build" steps.
+
+SCENE PLANNING RULES (CRITICAL):
+- If the user asks for a "scene", "workspace", "war room", "command center", "control room", "lab", "studio", "operating system", "everything I need", or any broad outcome that benefits from multiple coordinated windows, use finalAction:"sequential".
+- A high-quality scene usually has 2-5 windows. Avoid one giant artifact unless the user explicitly asks for one surface.
+- Populate scenePlan.windows to explain the intended workspace. Then mirror those windows as executable subActions.
+- Use action:"build" with artifactKind:"thinklet" for persistent interactive tools: stateful workflows, CRUD, forms, uploads, exports, charts, AI buttons, agents, automation controls, connector actions, or anything that should remember user data.
+- Use action:"build" with artifactKind:"html" for polished static or semi-static surfaces: reports, dashboards, pages, briefs, galleries, boards, strategy docs, media-rich references, and executive-ready views.
+- For single-window finalAction:"build" requests, set top-level artifactKind with the same html-vs-thinklet judgment.
+- Use action:"research" through steps/researchQueries when current, live, recent, or factual external context matters. Research artifacts can sit beside the final scene.
+- Use image/video/audio generation only when it materially improves the scene; do not add media as filler.
+- For connector windows, create Thinklets that show connection state, require explicit user clicks for side effects, and ask for missing fields instead of pretending an integration is already configured.
+- Scene subAction prompts must name how each window relates to the others, including any desktopBus or agent outputs it should publish/consume.
 
 ROUTING RULES:
 - "image of X" / "picture of X" → finalAction:"image"
@@ -12007,7 +12388,7 @@ JSON ONLY:`;
           if (step === 'image') return { action: 'image', count: 1, prompt: plan.imageDescription || prompt };
           if (step === 'multi-image') return { action: 'multi-image', imageCount: plan.imageCount || 3, prompt: plan.imageDescription || prompt, imagePrompts: plan.imagePrompts || [] };
           if (step === 'video') return { action: 'video', count: 1, prompt: plan.videoDescription || prompt };
-          if (step === 'build' || step === 'mockup') return { action: 'mockup', count: 1, prompt: prompt };
+          if (step === 'build' || step === 'mockup' || step === 'scene') return { action: 'build', artifactKind: 'html', count: 1, prompt: prompt };
           if (step === 'research') return null; // research is handled separately before sequential
           return { action: step, count: 1, prompt: prompt };
         }).filter(Boolean);
@@ -12298,7 +12679,7 @@ JSON ONLY:`;
               desktopArtifactOffsetRef.current = artifactOffset;
             }
 
-          } else if (sub.action === 'build' || sub.action === 'mockup') {
+          } else if (sub.action === 'build' || sub.action === 'mockup' || sub.action === 'thinklet' || sub.action === 'html' || sub.action === 'artifact') {
             let bp = sub.prompt || prompt;
             if (collected.images.length > 0) {
               // Each entry may be a {url, role, section, prompt, aspectRatio}
@@ -12338,7 +12719,19 @@ When laying out the page, build sections in the order suggested by the roles (he
             for (let bi = 0; bi < buildCount; bi++) {
               if (!isMountedRef.current || isGenerationJobCancelled(desktopJobId)) break;
               const specificPrompt = buildCount > 1 ? `${bp} (Variation/Item ${bi + 1})` : bp;
-              await generateAppArtifact(specificPrompt, (sub.prompt || prompt).substring(0, 30));
+              const requestedKind = String(sub.artifactKind || (sub.action === 'thinklet' ? 'thinklet' : '') || (sub.action === 'html' ? 'html' : '') || sub.kind || '').toLowerCase();
+              const previousThinkletMode = isDesktopThinkletModeOnRef.current;
+              if (requestedKind === 'thinklet' || requestedKind === 'react' || requestedKind === 'tool') {
+                isDesktopThinkletModeOnRef.current = true;
+              } else if (requestedKind === 'html' || requestedKind === 'artifact' || requestedKind === 'page' || requestedKind === 'report') {
+                isDesktopThinkletModeOnRef.current = false;
+              }
+              try {
+                const titleHint = String(sub.title || sub.windowTitle || sub.prompt || prompt).substring(0, 30);
+                await generateAppArtifact(specificPrompt, titleHint);
+              } finally {
+                isDesktopThinkletModeOnRef.current = previousThinkletMode;
+              }
             }
           }
         }
@@ -12449,7 +12842,18 @@ When laying out the page, build sections in the order suggested by the roles (he
         return;
       }
 
-      await generateAppArtifact(prompt + researchCtx + refImgCtx + refVidCtx, prompt.substring(0, 30));
+      const requestedBuildKind = String(plan.artifactKind || plan.kind || '').toLowerCase();
+      const previousThinkletMode = isDesktopThinkletModeOnRef.current;
+      if (requestedBuildKind === 'thinklet' || requestedBuildKind === 'react' || requestedBuildKind === 'tool') {
+        isDesktopThinkletModeOnRef.current = true;
+      } else if (requestedBuildKind === 'html' || requestedBuildKind === 'artifact' || requestedBuildKind === 'page' || requestedBuildKind === 'report') {
+        isDesktopThinkletModeOnRef.current = false;
+      }
+      try {
+        await generateAppArtifact(prompt + researchCtx + refImgCtx + refVidCtx, prompt.substring(0, 30));
+      } finally {
+        isDesktopThinkletModeOnRef.current = previousThinkletMode;
+      }
 
     } catch (plannerErr) {
       addDebugLog('warning', `[Desktop Smart] Planner failed: ${plannerErr?.message}. Falling back to simple detection.`);
@@ -12753,7 +13157,7 @@ When laying out the page, build sections in the order suggested by the roles (he
     {
       id: 'open-scenes',
       title: 'Open Scenes',
-      subtitle: 'Multi-step pipelines with research, media, and builds',
+      subtitle: 'Intelligent workspaces with tools, media, research, and automations',
       group: 'Create',
       icon: SparklesIcon,
       run: () => { setIsDesktopComboOpen(true); setShowToolsMenu(false); },
@@ -13594,20 +13998,22 @@ Schema:
 
 "${prompt}"
 
+SCENE DEFINITION:
+${THINKLET_SCENE_CREATION_GUIDE}
+
+AVAILABLE THINKLET CAPABILITIES:
+${THINKLET_CAPABILITY_CONTEXT}
+
 Your tasks:
-1. CATEGORIZE this into exactly one of these categories: "Research + Build", "Research + Image", "Research + Video + Build", "Video Scenes", "Multi-Asset", "Creative"
-   - "Research + Build": User wants web research THEN a built app/dashboard/page from the data
-   - "Research + Image": User wants research data visualized as an AI image
-   - "Research + Video + Build": User wants research, a video, AND a built page
-   - "Video Scenes": User wants AI-generated video content (backgrounds, clips, animations)
-   - "Multi-Asset": User wants multiple asset types (images + video + builds combined)
-   - "Creative": Anything else creative (games, tools, art, unique experiences)
-2. REFINE the prompt into a more detailed, professional version that will produce better AI results. Keep the user's core intent but make it more specific, descriptive, and actionable. Add details about style, quality, composition, and technical specifics where appropriate. The refined prompt should be 2-4 sentences.
-3. Create a short, catchy label (3-8 words max) for this scene.
+1. Choose the best top-level audience from exactly this list: "${SCENE_AUDIENCE_CATEGORIES.map(group => group.label).join('", "')}".
+2. Choose a concise category name. Prefer one of the existing scene categories if it fits: "${[...new Set(DESKTOP_COMBO_PROMPTS.map(scene => scene.category || 'General'))].join('", "')}". If none fit, create a professional 1-3 word category.
+3. REFINE the prompt into a more detailed, professional scene instruction that will produce better AI results. Keep the user's core intent but make it more specific, descriptive, and actionable. Make it clear this is a multi-window workspace and mention the likely HTML artifacts, React Thinklet tools, research, generated media, automations, window relationships, and integrations where useful. The refined prompt should be 2-4 sentences.
+4. Create a short, catchy label (3-8 words max) for this scene.
 
 Output JSON only (no markdown fences):
 {
-  "category": "one of the 6 categories above",
+  "audience": "one of the audience labels above",
+  "category": "Short Category",
   "label": "Short Catchy Label",
   "refinedPrompt": "The improved, detailed version of the user's prompt with specific details"
 }`
@@ -13616,9 +14022,11 @@ Output JSON only (no markdown fences):
     },
     onSuccess: ({ result, originalPrompt }) => {
       const parsed = safeExtractJSON(result);
-      const validCategories = ['Research + Build', 'Research + Image', 'Research + Video + Build', 'Video Scenes', 'Multi-Asset', 'Creative'];
-
-      const category = parsed?.category && validCategories.includes(parsed.category) ? parsed.category : 'Creative';
+      const validAudiences = SCENE_AUDIENCE_CATEGORIES.map(group => group.label);
+      const audience = parsed?.audience && validAudiences.includes(parsed.audience) ? parsed.audience : THINKLET_SCENES_AUDIENCE;
+      const category = parsed?.category && typeof parsed.category === 'string'
+        ? parsed.category.trim().slice(0, 42)
+        : 'Custom Scene';
       const label = parsed?.label || originalPrompt.substring(0, 40);
       const refinedPrompt = parsed?.refinedPrompt || originalPrompt;
 
@@ -13628,13 +14036,55 @@ Output JSON only (no markdown fences):
         'Research + Video + Build': 'VideoIcon',
         'Video Scenes': 'VideoIcon',
         'Multi-Asset': 'LayersIcon',
-        'Creative': 'PaletteIcon'
+        'Creative': 'PaletteIcon',
+        'Launch Command': 'RocketIcon',
+        'Growth Loops': 'LineChartIcon',
+        'Fundraising': 'BriefcaseIcon',
+        'Market Intelligence': 'BarChart3Icon',
+        'Campaign Studio': 'MegaphoneIcon',
+        'Brand Systems': 'PaletteIcon',
+        'Motion Studio': 'VideoIcon',
+        'Client Delivery': 'PenToolIcon',
+        'Executive Ops': 'Building2Icon',
+        'Finance Ops': 'BarChart3Icon',
+        'Risk & Compliance': 'ShieldCheckIcon',
+        'Process Automation': 'WorkflowIcon',
+        'Revenue': 'HandshakeIcon',
+        'Customer Ops': 'ActivityIcon',
+        'Outbound': 'MailIcon',
+        'Product Strategy': 'BoxesIcon',
+        'User Research': 'EyeIcon',
+        'Design Systems': 'PaletteIcon',
+        'Release Ops': 'WrenchIcon',
+        'Competitive Intel': 'BrainIcon',
+        'Regulatory': 'GlobeIcon',
+        'Diligence': 'DatabaseIcon',
+        'Knowledge Work': 'GraduationCapIcon',
+        'Life OS': 'CalendarIcon',
+        'Learning': 'BookOpenIcon',
+        'Finance': 'LineChartIcon',
+        'Planning': 'GlobeIcon',
+        'Wellness': 'HeartIcon',
+        'AI Operations': 'CircuitBoardIcon',
+        'Commerce': 'ShoppingBagIcon',
+      };
+
+      const audienceIconMap = {
+        [THINKLET_SCENES_AUDIENCE]: 'BrainIcon',
+        'Founders & Growth': 'RocketIcon',
+        'Creative Studios': 'PenToolIcon',
+        'Enterprise Ops': 'Building2Icon',
+        'Sales & Customer Teams': 'HandshakeIcon',
+        'Product & Design': 'BoxesIcon',
+        'Research & Intelligence': 'BrainIcon',
+        'Personal Operators': 'CalendarIcon',
       };
 
       const newScene = {
         id: `saved-scene-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         label,
-        iconName: categoryIconMap[category] || 'SparklesIcon',
+        iconName: categoryIconMap[category] || audienceIconMap[audience] || 'SparklesIcon',
+        audience,
         category,
         prompt: refinedPrompt,
         originalPrompt,
@@ -13648,7 +14098,7 @@ Output JSON only (no markdown fences):
         return updated;
       });
 
-      toast({ title: "\uD83C\uDFAC Scene Saved!", description: `"${label}" added to ${category}` });
+      toast({ title: "\uD83C\uDFAC Scene Saved!", description: `"${label}" added to ${audience}` });
     },
     onError: (error) => {
       toast({ title: "Save Failed", description: error?.message || "Could not save scene", variant: "destructive" });
@@ -13701,6 +14151,28 @@ Output JSON only (no markdown fences):
       'ActivityIcon': ActivityIcon,
       'GlobeIcon': GlobeIcon,
       'BrainIcon': BrainIcon,
+      'BarChart3Icon': BarChart3Icon,
+      'BookOpenIcon': BookOpenIcon,
+      'BoxesIcon': BoxesIcon,
+      'BriefcaseIcon': BriefcaseIcon,
+      'Building2Icon': Building2Icon,
+      'CalendarIcon': CalendarIcon,
+      'CircuitBoardIcon': CircuitBoardIcon,
+      'DatabaseIcon': DatabaseIcon,
+      'EyeIcon': EyeIcon,
+      'GraduationCapIcon': GraduationCapIcon,
+      'HandshakeIcon': HandshakeIcon,
+      'HeartIcon': HeartIcon,
+      'LineChartIcon': LineChartIcon,
+      'MailIcon': MailIcon,
+      'MegaphoneIcon': MegaphoneIcon,
+      'PenToolIcon': PenToolIcon,
+      'RocketIcon': RocketIcon,
+      'ShieldCheckIcon': ShieldCheckIcon,
+      'ShoppingBagIcon': ShoppingBagIcon,
+      'UsersIcon': UsersIcon,
+      'WorkflowIcon': WorkflowIcon,
+      'WrenchIcon': WrenchIcon,
     };
     return iconMap[iconName] || SparklesIcon;
   }, []);
@@ -13868,14 +14340,15 @@ Output JSON only (no markdown fences):
   useEffect(() => {
     const incoming = content?.desktopArtifacts;
     if (!incoming || !Array.isArray(incoming)) return;
+    const activeIncoming = incoming.filter(a => a?.id && !deletedDesktopArtifactIdsRef.current.has(a.id));
     setDesktopArtifacts(prev => {
       // If current state is empty, populate from content prop (cold start before hydration runs)
-      if (prev.length === 0) return incoming;
+      if (prev.length === 0) return activeIncoming;
       // If lengths and first ID match, the lists are in sync — do nothing
-      if (prev.length === incoming.length && prev[0]?.id === incoming[0]?.id) return prev;
+      if (prev.length === activeIncoming.length && prev[0]?.id === activeIncoming[0]?.id) return prev;
       // Merge: add artifacts that are in incoming but missing from prev
       const prevIds = new Set(prev.map(a => a.id));
-      const truly_new = incoming.filter(a => !prevIds.has(a.id));
+      const truly_new = activeIncoming.filter(a => !prevIds.has(a.id));
       if (truly_new.length === 0) return prev;
       return [...prev, ...truly_new];
     });
@@ -14003,6 +14476,26 @@ Output JSON only (no markdown fences):
       });
     }
   }, [content?.desktopSavedScenes]);
+
+  useEffect(() => {
+    if (content?.desktopSceneFolders && Array.isArray(content.desktopSceneFolders)) {
+      const activeFolders = content.desktopSceneFolders
+        .map(folder => ({
+          ...folder,
+          artifactIds: (folder.artifactIds || []).filter(id => !deletedDesktopArtifactIdsRef.current.has(id)),
+        }))
+        .filter(folder => folder.artifactIds.length > 0);
+      setDesktopSceneFolders(prev => {
+        if (
+          prev.length === activeFolders.length &&
+          prev.length > 0 &&
+          prev[0]?.id === activeFolders[0]?.id &&
+          prev[0]?.artifactIds?.length === activeFolders[0]?.artifactIds?.length
+        ) return prev;
+        return activeFolders;
+      });
+    }
+  }, [content?.desktopSceneFolders]);
 
   useEffect(() => {
     if (content?.workspaceSnapshots && Array.isArray(content.workspaceSnapshots)) {
@@ -14152,8 +14645,8 @@ Output JSON only (no markdown fences):
                 <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
                   <div className={`${toolbarClusterClass} flex-shrink-0`}>
                     <button className="w-3 h-3 rounded-full bg-rose-400 hover:bg-rose-300 cursor-pointer transition-colors shadow-sm shadow-rose-500/20" onClick={() => setShowClearDesktopConfirm(true)} title="Clear All Artifacts" />
-                    <button className="w-3 h-3 rounded-full bg-amber-300 hover:bg-amber-200 cursor-pointer transition-colors shadow-sm shadow-amber-500/20" onClick={() => persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: true })))} title="Minimize All" />
-                    <button className="w-3 h-3 rounded-full bg-emerald-400 hover:bg-emerald-300 cursor-pointer transition-colors shadow-sm shadow-emerald-500/20" onClick={() => persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: false })))} title="Restore All" />
+                    <button className="w-3 h-3 rounded-full bg-amber-300 hover:bg-amber-200 cursor-pointer transition-colors shadow-sm shadow-amber-500/20" onClick={handleCollapseDesktopToSceneFolder} title="Collapse Desktop to Scene Folder" />
+                    <button className="w-3 h-3 rounded-full bg-emerald-400 hover:bg-emerald-300 cursor-pointer transition-colors shadow-sm shadow-emerald-500/20" onClick={handleRestoreAllDesktopArtifacts} title="Restore All" />
                   </div>
 
                   {/* Connection Mode Indicator */}
@@ -14260,7 +14753,7 @@ Output JSON only (no markdown fences):
 
                             <button
                               onClick={() => {
-                                persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: false })));
+                                handleRestoreAllDesktopArtifacts();
                                 setIsDesktopSettingsOpen(false);
                                 toast({ title: "Restored", description: "All windows restored" });
                               }}
@@ -14279,17 +14772,16 @@ Output JSON only (no markdown fences):
 
                             <button
                               onClick={() => {
-                                persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: true })));
+                                handleCollapseDesktopToSceneFolder();
                                 setIsDesktopSettingsOpen(false);
-                                toast({ title: "Minimized", description: "All windows minimized" });
                               }}
                               className={popoverItemClass(false, 'amber')}
                             >
                               <div className={popoverIconClass('amber')}>
-                                <MinimizeIcon className="w-4 h-4" />
+                                <FolderIcon className="w-4 h-4" />
                               </div>
                               <div className="text-left">
-                                <span className="text-xs font-semibold block">Minimize All Windows</span>
+                                <span className="text-xs font-semibold block">Collapse to Scene Folder</span>
                                 <span className={`text-[10px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.42]'}`}>
                                   {openArtifactsCount} open
                                 </span>
@@ -14342,7 +14834,11 @@ Output JSON only (no markdown fences):
                                   return;
                                 }
                                 await handleCreateWorkspaceSnapshot('Before clear', { silent: true });
+                                desktopArtifacts.forEach(artifact => {
+                                  if (artifact?.id) deletedDesktopArtifactIdsRef.current.add(artifact.id);
+                                });
                                 persistDesktopArtifacts([]);
+                                persistDesktopSceneFolders([]);
                                 setIsDesktopSettingsOpen(false);
                                 toast({ title: "Cleared", description: `Removed ${desktopArtifacts.length} artifact${desktopArtifacts.length !== 1 ? 's' : ''}` });
                               }}
@@ -14480,7 +14976,7 @@ Output JSON only (no markdown fences):
                     <button
                       onClick={() => { setIsDesktopComboOpen(!isDesktopComboOpen); setIsDesktopModeMenuOpen(false); }}
                       className={toolbarButtonClass(isDesktopComboOpen, 'violet')}
-                      title="Scenes — Multi-step AI pipelines with research, images & video"
+                      title="Scenes — AI-composed workspaces with tools, artifacts, media, and automations"
                     >
                       <SparklesIcon className="w-3 h-3" />
                       <span className="hidden sm:inline">Scenes</span>
@@ -14504,7 +15000,7 @@ Output JSON only (no markdown fences):
                               </div>
                               <div>
                                 <div className={`text-sm font-semibold ${desktopLightMode ? 'text-slate-950' : 'text-white'}`}>Scenes</div>
-                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>Multi-step pipelines for research, media, apps, and automation.</div>
+                                <div className={`text-[11px] ${desktopLightMode ? 'text-slate-500' : 'text-white/[0.44]'}`}>Ready-made workspaces of HTML artifacts, Thinklet tools, media, research, and automation.</div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -14524,7 +15020,20 @@ Output JSON only (no markdown fences):
                           </div>
 
                           {(() => {
-                            const sceneCategories = [...new Set(DESKTOP_COMBO_PROMPTS.map(c => c.category || 'General'))];
+                            const visibleCombosAll = DESKTOP_COMBO_PROMPTS.filter(c => !hiddenScenes.includes(c.id));
+                            const activeAudienceLabel = desktopSceneAudienceFilter === 'all' ? 'all' : desktopSceneAudienceFilter;
+                            const visibleCombosByAudience = activeAudienceLabel === 'all'
+                              ? visibleCombosAll
+                              : visibleCombosAll.filter(c => (c.audience || THINKLET_SCENES_AUDIENCE) === activeAudienceLabel);
+                            const savedScenesByAudience = activeAudienceLabel === 'all'
+                              ? desktopSavedScenes
+                              : desktopSavedScenes.filter(scene => (scene.audience || THINKLET_SCENES_AUDIENCE) === activeAudienceLabel);
+                            const sceneCategories = [
+                              ...new Set([
+                                ...visibleCombosByAudience.map(c => c.category || 'General'),
+                                ...savedScenesByAudience.map(c => c.category || 'Custom Scene'),
+                              ]),
+                            ];
                             const categoryMeta = {
                               'Research + Build': { icon: SearchIcon, color: desktopLightMode ? 'text-indigo-600' : 'text-indigo-400', bg: desktopLightMode ? 'bg-indigo-50 border-indigo-200' : 'bg-indigo-500/10 border-indigo-500/20' },
                               'Research + Image': { icon: ImageIcon, color: desktopLightMode ? 'text-pink-600' : 'text-pink-400', bg: desktopLightMode ? 'bg-pink-50 border-pink-200' : 'bg-pink-500/10 border-pink-500/20' },
@@ -14532,12 +15041,119 @@ Output JSON only (no markdown fences):
                               'Video Scenes': { icon: VideoIcon, color: desktopLightMode ? 'text-fuchsia-600' : 'text-fuchsia-400', bg: desktopLightMode ? 'bg-fuchsia-50 border-fuchsia-200' : 'bg-fuchsia-500/10 border-fuchsia-500/20' },
                               'Multi-Asset': { icon: LayersIcon, color: desktopLightMode ? 'text-amber-600' : 'text-amber-400', bg: desktopLightMode ? 'bg-amber-50 border-amber-200' : 'bg-amber-500/10 border-amber-500/20' },
                               'Creative': { icon: PaletteIcon, color: desktopLightMode ? 'text-emerald-600' : 'text-emerald-400', bg: desktopLightMode ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-500/10 border-emerald-500/20' },
+                              'Launch Command': { icon: RocketIcon, color: desktopLightMode ? 'text-sky-700' : 'text-sky-300' },
+                              'Growth Loops': { icon: LineChartIcon, color: desktopLightMode ? 'text-emerald-700' : 'text-emerald-300' },
+                              'Fundraising': { icon: BriefcaseIcon, color: desktopLightMode ? 'text-indigo-700' : 'text-indigo-300' },
+                              'Market Intelligence': { icon: BarChart3Icon, color: desktopLightMode ? 'text-cyan-700' : 'text-cyan-300' },
+                              'Campaign Studio': { icon: MegaphoneIcon, color: desktopLightMode ? 'text-rose-700' : 'text-rose-300' },
+                              'Brand Systems': { icon: PaletteIcon, color: desktopLightMode ? 'text-fuchsia-700' : 'text-fuchsia-300' },
+                              'Motion Studio': { icon: VideoIcon, color: desktopLightMode ? 'text-violet-700' : 'text-violet-300' },
+                              'Client Delivery': { icon: PenToolIcon, color: desktopLightMode ? 'text-slate-700' : 'text-slate-200' },
+                              'Executive Ops': { icon: Building2Icon, color: desktopLightMode ? 'text-blue-700' : 'text-blue-300' },
+                              'Finance Ops': { icon: BarChart3Icon, color: desktopLightMode ? 'text-emerald-700' : 'text-emerald-300' },
+                              'Risk & Compliance': { icon: ShieldCheckIcon, color: desktopLightMode ? 'text-red-700' : 'text-red-300' },
+                              'Process Automation': { icon: WorkflowIcon, color: desktopLightMode ? 'text-violet-700' : 'text-violet-300' },
+                              'Revenue': { icon: HandshakeIcon, color: desktopLightMode ? 'text-teal-700' : 'text-teal-300' },
+                              'Customer Ops': { icon: ActivityIcon, color: desktopLightMode ? 'text-orange-700' : 'text-orange-300' },
+                              'Outbound': { icon: MailIcon, color: desktopLightMode ? 'text-sky-700' : 'text-sky-300' },
+                              'Product Strategy': { icon: BoxesIcon, color: desktopLightMode ? 'text-indigo-700' : 'text-indigo-300' },
+                              'User Research': { icon: EyeIcon, color: desktopLightMode ? 'text-purple-700' : 'text-purple-300' },
+                              'Design Systems': { icon: PaletteIcon, color: desktopLightMode ? 'text-pink-700' : 'text-pink-300' },
+                              'Release Ops': { icon: WrenchIcon, color: desktopLightMode ? 'text-amber-700' : 'text-amber-300' },
+                              'Competitive Intel': { icon: BrainIcon, color: desktopLightMode ? 'text-violet-700' : 'text-violet-300' },
+                              'Regulatory': { icon: GlobeIcon, color: desktopLightMode ? 'text-cyan-700' : 'text-cyan-300' },
+                              'Diligence': { icon: DatabaseIcon, color: desktopLightMode ? 'text-slate-700' : 'text-slate-200' },
+                              'Knowledge Work': { icon: GraduationCapIcon, color: desktopLightMode ? 'text-blue-700' : 'text-blue-300' },
+                              'Life OS': { icon: CalendarIcon, color: desktopLightMode ? 'text-emerald-700' : 'text-emerald-300' },
+                              'Learning': { icon: BookOpenIcon, color: desktopLightMode ? 'text-indigo-700' : 'text-indigo-300' },
+                              'Finance': { icon: LineChartIcon, color: desktopLightMode ? 'text-emerald-700' : 'text-emerald-300' },
+                              'Planning': { icon: GlobeIcon, color: desktopLightMode ? 'text-cyan-700' : 'text-cyan-300' },
+                              'Wellness': { icon: HeartIcon, color: desktopLightMode ? 'text-rose-700' : 'text-rose-300' },
+                              'AI Operations': { icon: CircuitBoardIcon, color: desktopLightMode ? 'text-violet-700' : 'text-violet-300' },
+                              'Commerce': { icon: ShoppingBagIcon, color: desktopLightMode ? 'text-amber-700' : 'text-amber-300' },
                             };
-                            const visibleCombosAll = DESKTOP_COMBO_PROMPTS.filter(c => !hiddenScenes.includes(c.id));
                             const filteredCategories = desktopSceneFilter === 'all' ? sceneCategories : sceneCategories.filter(cat => cat === desktopSceneFilter);
-                            const totalCount = desktopSceneFilter === 'all' ? visibleCombosAll.length : visibleCombosAll.filter(c => (c.category || 'General') === desktopSceneFilter).length;
                             return (
                               <>
+                                <div className={`grid grid-cols-2 gap-2 border-b px-3 py-3 md:grid-cols-3 lg:grid-cols-5 ${
+                                  desktopLightMode
+                                    ? 'border-slate-200/70 bg-white/70'
+                                    : 'border-white/[0.06] bg-white/[0.025]'
+                                }`}>
+                                  <button
+                                    onClick={() => {
+                                      setDesktopSceneAudienceFilter('all');
+                                      setDesktopSceneFilter('all');
+                                    }}
+                                    className={`group flex min-h-[62px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
+                                      desktopSceneAudienceFilter === 'all'
+                                        ? desktopLightMode
+                                          ? 'border-violet-200 bg-white text-slate-950 shadow-sm'
+                                          : 'border-violet-400/30 bg-violet-400/12 text-white'
+                                        : desktopLightMode
+                                          ? 'border-slate-200/70 bg-slate-50/70 text-slate-500 hover:bg-white'
+                                          : 'border-white/[0.055] bg-white/[0.035] text-white/52 hover:bg-white/[0.07]'
+                                    }`}
+                                  >
+                                    <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl ${
+                                      desktopSceneAudienceFilter === 'all'
+                                        ? 'bg-violet-500 text-white'
+                                        : desktopLightMode ? 'bg-white text-slate-500 shadow-sm' : 'bg-white/[0.07] text-white/62'
+                                    }`}>
+                                      <SparklesIcon className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="truncate text-[11px] font-bold">All Scenes</span>
+                                        <span className="rounded-full bg-current/10 px-1.5 py-0.5 text-[9px] font-bold tabular-nums opacity-70">
+                                          {visibleCombosAll.length + desktopSavedScenes.length}
+                                        </span>
+                                      </div>
+                                      <div className="mt-0.5 line-clamp-2 text-[9px] leading-3 opacity-62">Browse intelligent workspace scenes for every kind of work.</div>
+                                    </div>
+                                  </button>
+                                  {SCENE_AUDIENCE_CATEGORIES.map(group => {
+                                    const AudienceIcon = group.icon || SparklesIcon;
+                                    const audienceCount = visibleCombosAll.filter(scene => (scene.audience || THINKLET_SCENES_AUDIENCE) === group.label).length
+                                      + desktopSavedScenes.filter(scene => (scene.audience || THINKLET_SCENES_AUDIENCE) === group.label).length;
+                                    const active = desktopSceneAudienceFilter === group.label;
+                                    return (
+                                      <button
+                                        key={group.id}
+                                        onClick={() => {
+                                          setDesktopSceneAudienceFilter(active ? 'all' : group.label);
+                                          setDesktopSceneFilter('all');
+                                        }}
+                                        className={`group flex min-h-[62px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
+                                          active
+                                            ? desktopLightMode
+                                              ? 'border-violet-200 bg-white text-slate-950 shadow-sm'
+                                              : 'border-violet-400/30 bg-violet-400/12 text-white'
+                                            : desktopLightMode
+                                              ? 'border-slate-200/70 bg-slate-50/70 text-slate-500 hover:bg-white'
+                                              : 'border-white/[0.055] bg-white/[0.035] text-white/52 hover:bg-white/[0.07]'
+                                        }`}
+                                      >
+                                        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl ${
+                                          active
+                                            ? 'bg-violet-500 text-white'
+                                            : desktopLightMode ? 'bg-white text-slate-500 shadow-sm' : 'bg-white/[0.07] text-white/62'
+                                        }`}>
+                                          <AudienceIcon className="h-4 w-4" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className="truncate text-[11px] font-bold">{group.shortLabel || group.label}</span>
+                                            <span className="rounded-full bg-current/10 px-1.5 py-0.5 text-[9px] font-bold tabular-nums opacity-70">
+                                              {audienceCount}
+                                            </span>
+                                          </div>
+                                          <div className="mt-0.5 line-clamp-2 text-[9px] leading-3 opacity-62">{group.detail}</div>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                                 <div className={`flex items-center gap-2 px-3 py-2.5 border-b flex-shrink-0 overflow-x-auto no-scrollbar ${
                             desktopLightMode
                               ? 'border-slate-200/70 bg-white/60'
@@ -14559,8 +15175,8 @@ Output JSON only (no markdown fences):
                                     }`}
                                   >
                                     <SparklesIcon className="w-3 h-3" />
-                                    All
-                                    <span className={`ml-0.5 text-[9px] tabular-nums ${desktopSceneFilter === 'all' ? '' : 'opacity-60'}`}>{visibleCombosAll.length + desktopSavedScenes.length}</span>
+                                    All Categories
+                                    <span className={`ml-0.5 text-[9px] tabular-nums ${desktopSceneFilter === 'all' ? '' : 'opacity-60'}`}>{visibleCombosByAudience.length + savedScenesByAudience.length}</span>
                                   </button>
                                   {desktopSavedScenes.length > 0 && (
                                     <button
@@ -14577,17 +15193,24 @@ Output JSON only (no markdown fences):
                                     >
                                       <BookmarkIcon className="w-3 h-3" />
                                       Saved
-                                      <span className={`ml-0.5 text-[9px] tabular-nums ${desktopSceneFilter === 'Saved' ? '' : 'opacity-60'}`}>{desktopSavedScenes.length}</span>
+                                      <span className={`ml-0.5 text-[9px] tabular-nums ${desktopSceneFilter === 'Saved' ? '' : 'opacity-60'}`}>{savedScenesByAudience.length}</span>
                                     </button>
                                   )}
                                   </div>
                                   <div className={`w-px h-4 mx-1 flex-shrink-0 ${desktopLightMode ? 'bg-gray-200' : 'bg-white/10'}`} />
-                                  {sceneCategories.map(cat => {
+                                  {desktopSceneAudienceFilter === 'all' ? (
+                                    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[10px] font-medium ${
+                                      desktopLightMode ? 'text-slate-400' : 'text-white/36'
+                                    }`}>
+                                      <FolderOpenIcon className="h-3 w-3" />
+                                      Choose an audience above to refine categories
+                                    </div>
+                                  ) : sceneCategories.map(cat => {
                                     const meta = categoryMeta[cat] || { icon: SparklesIcon, color: 'text-gray-500' };
                                     const CatFilterIcon = meta.icon;
-                                    const catCount = visibleCombosAll.filter(c => (c.category || 'General') === cat).length;
+                                    const catCount = visibleCombosByAudience.filter(c => (c.category || 'General') === cat).length + savedScenesByAudience.filter(s => (s.category || 'Custom Scene') === cat).length;
                                     const isActive = desktopSceneFilter === cat;
-                                    if (catCount === 0 && desktopSavedScenes.filter(s => s.category === cat).length === 0) return null;
+                                    if (catCount === 0) return null;
                                     return (
                                       <button
                                         key={cat}
@@ -14615,9 +15238,9 @@ Output JSON only (no markdown fences):
                                       <div className={`flex items-center gap-2 px-3 py-2 mb-3 rounded-lg ${desktopLightMode ? 'bg-amber-50/60' : 'bg-amber-500/5'}`}>
                                         <BookmarkIcon className={`w-3.5 h-3.5 ${desktopLightMode ? 'text-amber-500' : 'text-amber-400/70'}`} />
                                         <span className={`text-[11px] font-semibold ${desktopLightMode ? 'text-amber-700' : 'text-amber-300/80'}`}>Saved Scenes</span>
-                                        <span className={`text-[9px] ml-auto tabular-nums ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>{desktopSavedScenes.length}</span>
+                                        <span className={`text-[9px] ml-auto tabular-nums ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>{savedScenesByAudience.length}</span>
                                       </div>
-                                      {desktopSavedScenes.length === 0 ? (
+                                      {savedScenesByAudience.length === 0 ? (
                                         <div className={`flex flex-col items-center justify-center py-10 text-center ${desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>
                                           <BookmarkIcon className="w-8 h-8 mb-2 opacity-30" />
                                           <p className="text-xs font-medium">No saved scenes yet</p>
@@ -14625,7 +15248,7 @@ Output JSON only (no markdown fences):
                                         </div>
                                       ) : (
                                         <div className="grid grid-cols-2 gap-2">
-                                          {desktopSavedScenes.map((scene) => {
+                                          {savedScenesByAudience.map((scene) => {
                                             const SceneIcon = getSavedSceneIcon(scene.iconName);
                                             return (
                                               <div key={scene.id} className="relative group">
@@ -14634,6 +15257,7 @@ Output JSON only (no markdown fences):
                                                     setDesktopInput(scene.prompt);
                                                     setIsDesktopComboOpen(false);
                                                     setDesktopSceneFilter('all');
+                                                    setDesktopSceneAudienceFilter('all');
                                                   }}
                                                   className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all text-left ${
                                                     desktopLightMode
@@ -14688,8 +15312,8 @@ Output JSON only (no markdown fences):
                                   {filteredCategories.map(cat => {
                                     const meta = categoryMeta[cat] || { icon: SparklesIcon, color: 'text-gray-500', bg: 'bg-gray-50 border-gray-200' };
                                     const CatIcon = meta.icon;
-                                    const builtInItems = visibleCombosAll.filter(c => (c.category || 'General') === cat);
-                                    const savedItems = desktopSavedScenes.filter(s => s.category === cat);
+                                    const builtInItems = visibleCombosByAudience.filter(c => (c.category || 'General') === cat);
+                                    const savedItems = savedScenesByAudience.filter(s => (s.category || 'Custom Scene') === cat);
                                     const totalCatCount = builtInItems.length + savedItems.length;
                                     if (totalCatCount === 0) return null;
                                     return (
@@ -14711,6 +15335,7 @@ Output JSON only (no markdown fences):
                                                     setDesktopInput(scene.prompt);
                                                     setIsDesktopComboOpen(false);
                                                     setDesktopSceneFilter('all');
+                                                    setDesktopSceneAudienceFilter('all');
                                                   }}
                                                   className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all text-left ${
                                                     desktopLightMode
@@ -14768,6 +15393,7 @@ Output JSON only (no markdown fences):
                                                     setDesktopInput(combo.prompt);
                                                     setIsDesktopComboOpen(false);
                                                     setDesktopSceneFilter('all');
+                                                    setDesktopSceneAudienceFilter('all');
                                                   }}
                                                   className={`w-full flex items-start gap-3 p-3 rounded-xl transition-all text-left ${
                                                     desktopLightMode
@@ -14793,7 +15419,7 @@ Output JSON only (no markdown fences):
                                                     <span className={`text-[9px] leading-relaxed line-clamp-2 ${
                                                       desktopLightMode ? 'text-gray-400' : 'text-gray-500'
                                                     }`}>
-                                                      {combo.prompt.substring(0, 100)}...
+                                                      {(combo.displayPrompt || combo.prompt).substring(0, 100)}...
                                                     </span>
                                                   </div>
                                                 </button>
@@ -16744,7 +17370,7 @@ Output JSON only (no markdown fences):
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                        className={`w-full max-w-[780px] overflow-hidden rounded-[30px] border px-5 py-6 pointer-events-auto backdrop-blur-2xl sm:px-7 sm:py-7 ${
+                        className={`w-full max-w-[920px] max-h-[calc(100vh-8rem)] overflow-y-auto rounded-[30px] border px-5 py-6 pointer-events-auto backdrop-blur-2xl sm:px-7 sm:py-7 ${
                           desktopLightMode
                             ? 'border-white/80 bg-white/74 text-slate-950 shadow-2xl shadow-slate-400/18'
                             : 'border-white/12 bg-slate-950/46 text-white shadow-2xl shadow-black/30'
@@ -16811,13 +17437,98 @@ Output JSON only (no markdown fences):
                           })}
                         </div>
 
+                        <div className={`mt-6 rounded-3xl border p-4 ${
+                          desktopLightMode
+                            ? 'border-slate-200/70 bg-white/58 shadow-sm'
+                            : 'border-white/[0.08] bg-white/[0.035]'
+                        }`}>
+                          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-left">
+                              <div className={`flex items-center gap-2 text-[13px] font-bold ${desktopLightMode ? 'text-slate-900' : 'text-white/88'}`}>
+                                <FolderOpenIcon className="h-4 w-4" />
+                                Start from a Scene
+                              </div>
+                              <div className={`mt-1 text-[11px] leading-4 ${desktopLightMode ? 'text-slate-500' : 'text-white/48'}`}>
+                                Choose a workspace with artifacts, Thinklet tools, media, research, and automations composed together.
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDesktopSceneAudienceFilter('all');
+                                  setDesktopSceneFilter('all');
+                                  setIsDesktopComboOpen(true);
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                                  desktopLightMode
+                                    ? 'bg-slate-950 text-white hover:bg-slate-800'
+                                    : 'bg-white text-slate-950 hover:bg-white/90'
+                                }`}
+                              >
+                                Browse Scenes
+                                <ChevronDownIcon className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDesktopInput('Create a new scene for ');
+                                  setIsDesktopInputFocused(true);
+                                  setIsDesktopComboOpen(false);
+                                  requestAnimationFrame(() => desktopInputRef.current?.focus());
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                                  desktopLightMode
+                                    ? 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                                    : 'border-white/10 bg-white/[0.06] text-white/70 hover:bg-white/[0.1] hover:text-white'
+                                }`}
+                              >
+                                <PlusIcon className="h-3 w-3" />
+                                New Scene
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            {featuredHomeScenes.map((scene) => {
+                              const SceneIcon = scene.icon || SparklesIcon;
+                              return (
+                                <button
+                                  key={scene.id}
+                                  type="button"
+                                  onClick={() => handleDesktopSubmit(scene.executionPrompt || scene.prompt)}
+                                  className={`group relative min-h-[112px] overflow-hidden rounded-2xl border p-3 text-left transition-all ${
+                                    desktopLightMode
+                                      ? 'border-slate-200/70 bg-white/80 hover:border-violet-200 hover:shadow-lg hover:shadow-violet-200/20'
+                                      : 'border-white/[0.08] bg-slate-950/22 hover:border-violet-300/25 hover:bg-white/[0.06]'
+                                  }`}
+                                >
+                                  <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-cyan-400 via-violet-400 to-rose-400 opacity-60" />
+                                  <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${
+                                    desktopLightMode ? 'bg-violet-50 text-violet-600' : 'bg-violet-400/12 text-violet-200'
+                                  }`}>
+                                    <SceneIcon className="h-4 w-4" />
+                                  </div>
+                                  <div className={`line-clamp-2 text-[12px] font-bold leading-4 ${desktopLightMode ? 'text-slate-900' : 'text-white/88'}`}>
+                                    {scene.label}
+                                  </div>
+                                  <div className={`mt-1 text-[9px] font-semibold uppercase tracking-wide ${desktopLightMode ? 'text-violet-500' : 'text-violet-200/65'}`}>
+                                    {scene.audience || THINKLET_SCENES_AUDIENCE}
+                                  </div>
+                                  <SendIcon className={`absolute bottom-3 right-3 h-3.5 w-3.5 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 ${desktopLightMode ? 'text-slate-400' : 'text-white/42'}`} />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
                         <div className={`mt-5 flex flex-col items-center justify-between gap-3 rounded-2xl border px-4 py-3 sm:flex-row ${
                           desktopLightMode
                             ? 'border-slate-200/70 bg-slate-50/70 text-slate-500'
                             : 'border-white/[0.07] bg-white/[0.035] text-white/42'
                         }`}>
                           <div className="flex flex-wrap items-center justify-center gap-2 text-[12px] font-medium sm:justify-start">
-                            {['Apps', 'Images', 'Video', 'Research', 'Automation'].map((item) => (
+                            {['Scenes', 'Apps', 'Images', 'Video', 'Research', 'Automation'].map((item) => (
                               <span key={item} className={`rounded-full px-2.5 py-1 ${
                                 desktopLightMode ? 'bg-white text-slate-500 shadow-sm' : 'bg-white/[0.06] text-white/55'
                               }`}>
@@ -16973,12 +17684,15 @@ Output JSON only (no markdown fences):
                 );
               })()}
 
-              {minimizedArtifacts.length > 0 && (
+              {dockItemCount > 0 && (
                 <DesktopDock
-                  artifacts={minimizedArtifacts}
+                  sceneFolders={activeSceneFolders}
+                  artifacts={dockArtifacts}
                   totalArtifacts={desktopArtifacts.length}
                   onRestore={handleDesktopMinimize}
                   onClose={handleDesktopCloseArtifact}
+                  onRestoreSceneFolder={handleRestoreSceneFolder}
+                  onCloseSceneFolder={handleCloseSceneFolder}
                   desktopLightMode={desktopLightMode}
                   taskbarRef={desktopTaskbarRef}
                   overflowing={desktopTaskbarOverflows}
@@ -17370,6 +18084,7 @@ Output JSON only (no markdown fences):
                             onClick={async () => {
                               await handleCreateWorkspaceSnapshot('Before clear', { silent: true });
                               persistDesktopArtifacts(() => []);
+                              persistDesktopSceneFolders([]);
                               setShowClearDesktopConfirm(false);
                             }}
                             className="flex-1 py-2 px-4 rounded-xl text-xs font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors"

@@ -1,8 +1,136 @@
-import { ActivityIcon, BellIcon, BookOpenIcon, BrainIcon, CpuIcon, EyeIcon, Gamepad2Icon, GlobeIcon, HeartIcon, Music2Icon, PaletteIcon, PlayIcon, SunIcon, TargetIcon, VideoIcon } from 'lucide-react';
+import {
+  ActivityIcon,
+  BarChart3Icon,
+  BellIcon,
+  BookOpenIcon,
+  BoxesIcon,
+  BrainIcon,
+  BriefcaseIcon,
+  Building2Icon,
+  CalendarIcon,
+  CircuitBoardIcon,
+  CpuIcon,
+  DatabaseIcon,
+  EyeIcon,
+  Gamepad2Icon,
+  GlobeIcon,
+  GraduationCapIcon,
+  HandshakeIcon,
+  HeartIcon,
+  LineChartIcon,
+  MailIcon,
+  MegaphoneIcon,
+  Music2Icon,
+  PaletteIcon,
+  PenToolIcon,
+  PlayIcon,
+  RocketIcon,
+  ShieldCheckIcon,
+  ShoppingBagIcon,
+  SunIcon,
+  TargetIcon,
+  UsersIcon,
+  VideoIcon,
+  WorkflowIcon,
+  WrenchIcon,
+} from 'lucide-react';
 
 // ─── Scenes Data ────────────────────────────────────────────────────────────
 
-export const DESKTOP_COMBO_PROMPTS = [
+export const THINKLET_SCENES_AUDIENCE = 'Thinklet Scenes';
+
+export const SCENE_AUDIENCE_CATEGORIES = [
+  {
+    id: 'thinklet-scenes',
+    label: THINKLET_SCENES_AUDIENCE,
+    shortLabel: 'Thinklet',
+    icon: BrainIcon,
+    detail: 'Default demos that show the playful range of research, media, and builds.',
+  },
+  {
+    id: 'founders-growth',
+    label: 'Founders & Growth',
+    shortLabel: 'Founders',
+    icon: RocketIcon,
+    detail: 'Launch rooms, growth loops, customer signals, investor updates, and market motion.',
+  },
+  {
+    id: 'creative-studios',
+    label: 'Creative Studios',
+    shortLabel: 'Creative',
+    icon: PenToolIcon,
+    detail: 'Campaign worlds, brand systems, storyboards, media production, and client delivery.',
+  },
+  {
+    id: 'enterprise-ops',
+    label: 'Enterprise Ops',
+    shortLabel: 'Ops',
+    icon: Building2Icon,
+    detail: 'Executive command centers, SOPs, risk, finance, planning, and team coordination.',
+  },
+  {
+    id: 'sales-customer',
+    label: 'Sales & Customer Teams',
+    shortLabel: 'Sales',
+    icon: HandshakeIcon,
+    detail: 'Account rooms, CRM intelligence, support escalation, renewal health, and outreach.',
+  },
+  {
+    id: 'product-design',
+    label: 'Product & Design',
+    shortLabel: 'Product',
+    icon: BoxesIcon,
+    detail: 'Roadmaps, UX labs, design systems, release rooms, and user feedback loops.',
+  },
+  {
+    id: 'research-intelligence',
+    label: 'Research & Intelligence',
+    shortLabel: 'Intel',
+    icon: BrainIcon,
+    detail: 'Competitive intelligence, policy tracking, due diligence, datasets, and briefings.',
+  },
+  {
+    id: 'personal-operators',
+    label: 'Personal Operators',
+    shortLabel: 'Personal',
+    icon: CalendarIcon,
+    detail: 'Life admin, learning, money, health, travel, writing, and personal operating systems.',
+  },
+];
+
+export const THINKLET_SCENE_CREATION_GUIDE = `
+A Thinklet Scene is an intelligently composed workspace collection, not one artifact.
+The planner should choose the perfect set of windows for the user's goal:
+- Research windows for live/current/context gathering and source-backed briefings.
+- HTML artifacts for polished reports, dashboards, landing pages, boards, briefs, galleries, and visual reference surfaces.
+- React Thinklet tools for persistent interactive apps, stateful workflows, uploads/exports, charts, forms, AI buttons, file handling, automation controls, and user-owned data.
+- Generated images, videos, or audio when they materially improve the workspace.
+- Automation or connector Thinklets when integrations such as Gmail, Slack, GitHub, Google Sheets, Drive, Calendar, Notion, HubSpot, Salesforce, Stripe, Airtable, Jira, Linear, social channels, or other Composio APIs are useful.
+Every scene should feel like a ready-to-use desktop: 2-5 purposeful windows, clear relationships, no filler, no generic placeholders. Choose tools based on the user's intent rather than forcing a fixed template.
+`.trim();
+
+export const THINKLET_CAPABILITY_CONTEXT = `
+Thinklet capability map available to scene planning:
+- Architecture: single-file React component, default App-style function, props content and updateContent, hosted inside the Thinklet desktop runtime.
+- Persistence: TQL only. Available operations include set, push, pull, updateOne, batch, increment, multiply, unset, rename, toggle, append, addToDate, updateNested, updateMany, move, sort, addUnique, merge, and conditional. Use debounced writes for continuous input and batched writes for multi-field updates.
+- AI APIs: aiApi.generate for text and structured JSON, aiApi.generate with model:"sonar" for Perplexity-style web research, aiApi.generateImage for text-to-image, aiApi.analyzeImage for image analysis/transforms/OCR-style work, aiApi.scrapeUrl for public HTTPS extraction, aiApi.generateAudio for text-to-speech, and aiApi.generateVideo for text-to-video or image-to-video. All AI actions must be user-initiated and wrapped in useMutation.
+- Files and export: useFileImport for image/PDF/CSV/JSON/video uploads; useExport for PDF, CSV, Markdown, JSON, screenshots, and downloadFromUrl. Never use Blob, URL.createObjectURL, window.print, localStorage, or sessionStorage.
+- UI and data libraries: React, framer-motion, lucide-react icons with Icon suffix, shadcn/ui, recharts, three, TanStack React Query, react-hook-form, zod, lodash/debounce, and MarkdownRenderer.
+- Buildable Thinklets: notes, journals, wikis, task managers, kanban, CRMs, databases, spreadsheet-style tables, flashcards, research assistants, document summarizers, image generators/editors, podcast/audio tools, video generators, writing assistants, dashboards, charts, Three.js viewers, product tools, timers, games, forms, approval flows, calculators, galleries, invoices, polls, leaderboards, and comment/review tools.
+- Integrations: Thinklets can expose connector workflows for Gmail, Slack, GitHub, Notion, Sheets, Docs, Drive, Calendar, Linear, Jira, Airtable, HubSpot, Salesforce, Stripe, LinkedIn, X/Twitter, Discord, YouTube, Instagram, and similar SaaS APIs through Composio-style connected actions.
+- Styling: Tailwind-only for Thinklets, explicit media dimensions for audio/video containers, overflow-safe dialogs, responsive controls, polished states, no fake APIs, no unsupported libraries, no auto-triggered AI calls on mount or input change.
+`.trim();
+
+const withSceneWorkspaceContext = (scene) => ({
+  ...scene,
+  displayPrompt: scene.displayPrompt || scene.prompt,
+  executionPrompt: `Create this as a Thinklet Scene: a composed desktop workspace with the right mix of HTML artifacts, React Thinklet tools, research, generated media, connector-aware automations, and relationships between windows. Build 2-5 purposeful windows chosen for the user's goal; avoid filler and generic placeholders.
+
+Scene goal:
+${scene.prompt}`,
+});
+
+const THINKLET_DEFAULT_PROMPTS = [
   // ── Research + Build ──
   { id: 'news-monster', label: '📰 News Monster Collage', icon: GlobeIcon, category: 'Research + Build', prompt: 'Research the latest global news headlines from today, then generate an AI image of a fuzzy cuddling anthropomorphic monster expressing how he feels about the news with a word cloud of headlines around him, and then build a highly detailed CSS recreation of a newspaper front page about today\'s top stories using the real headlines from the research.' },
   { id: 'stock-dashboard', label: '📈 Live Stock Tracker', icon: ActivityIcon, category: 'Research + Build', prompt: 'Research the top 10 trending stocks today with their prices, percentage changes, and market sentiment, then build a professional dark-mode stock trading dashboard displaying real-time data cards, sparkline charts, and a news ticker with actual headlines about each stock.' },
@@ -43,4 +171,61 @@ export const DESKTOP_COMBO_PROMPTS = [
   { id: 'virtual-museum', label: '🏛️ Virtual Art Museum', icon: EyeIcon, category: 'Creative', prompt: 'Generate 5 AI images of different abstract artworks in various styles (impressionist, cubist, surrealist, minimalist, pop art), then build a virtual museum gallery with room-like sections, each artwork displayed on a wall with a description card, ambient lighting effects, and elegant navigation between rooms.' },
   { id: 'immersive-portfolio-video', label: '🎬 Immersive Video Portfolio', icon: VideoIcon, category: 'Creative', prompt: 'Generate an AI video of smooth cinematic abstract liquid metallic shapes morphing in deep violet and gold tones as a seamless loop, then generate 3 AI images of stunning creative project thumbnails in different styles, then build a creative portfolio website with the video as the full-page hero background, the images in a masonry gallery, and elegant navigation with scroll-triggered animations.' },
   { id: 'music-video-player', label: '🎵 Music Player + Visualizer Video', icon: Music2Icon, category: 'Creative', prompt: 'Generate an AI video of abstract audio waveforms and particle equalizer bars pulsing rhythmically in neon colors against a dark background as a seamless loop, then build a dark-themed music streaming interface with the video as the now-playing background, album art grid, playlist sidebar, and a sleek playback bar with progress indicator.' },
+];
+
+const PROFESSIONAL_SCENE_PROMPTS = [
+  // ── Founders & Growth ──
+  { id: 'founder-launch-room', label: '🚀 Founder Launch Room', icon: RocketIcon, audience: 'Founders & Growth', category: 'Launch Command', prompt: 'Create a complete founder launch scene: research the target market and competitors, build a launch command dashboard with positioning, launch timeline, beta user segments, risk flags, and KPI cards; generate a premium hero image for the product vision; create a short motion teaser concept; and add Thinklet tools for drafting landing-page copy, launch emails, and daily launch updates. If connected API integrations are available, include hooks for Google Sheets metrics, Gmail outreach, Slack updates, GitHub issues, and Stripe or analytics data.' },
+  { id: 'growth-experiment-lab', label: '📈 Growth Experiment Lab', icon: LineChartIcon, audience: 'Founders & Growth', category: 'Growth Loops', prompt: 'Create a growth experiment workspace scene for a startup: build an HTML experiment board with ICE scoring, acquisition channels, cohort metrics, and a learning log; generate ad creative image directions; create a short video storyboard for the best experiment; and add Thinklet automation cards that can pull data from analytics, Stripe, HubSpot, Airtable, or Google Sheets when connected.' },
+  { id: 'investor-update-studio', label: '💼 Investor Update Studio', icon: BriefcaseIcon, audience: 'Founders & Growth', category: 'Fundraising', prompt: 'Create an investor update scene: research the latest market narrative for the company category, build a polished founder update dashboard with traction metrics, wins, asks, runway, hiring needs, and product screenshots; generate one clean chart-focused image; and create Thinklet tools for turning raw notes into investor emails, board slides, and follow-up tasks. Include optional integrations for Gmail, Calendar, Google Drive, Notion, and Stripe metrics.' },
+  { id: 'pricing-intelligence-room', label: '💎 Pricing Intelligence Room', icon: BarChart3Icon, audience: 'Founders & Growth', category: 'Market Intelligence', prompt: 'Create a pricing intelligence scene: research comparable tools and current pricing pages, build a competitive pricing matrix with packaging recommendations, willingness-to-pay assumptions, margin notes, and experiment ideas; generate a clean visual pricing architecture image; and add Thinklet tools for running one-off pricing CRISPR updates to a landing page artifact. Include optional connectors for Stripe, HubSpot, Google Sheets, and website scraping.' },
+
+  // ── Creative Studios ──
+  { id: 'campaign-war-room', label: '🎯 Campaign War Room', icon: MegaphoneIcon, audience: 'Creative Studios', category: 'Campaign Studio', prompt: 'Create a high-end campaign war room scene for a creative team: build an HTML command center with audience insights, core message, channel plan, deliverable checklist, shoot list, launch calendar, and approval status; generate 3 campaign key visual directions as images; create a 15-second video concept board; and include Thinklet tools for repurposing the campaign into social posts, emails, ads, and client notes. Use connected Slack, Google Drive, Calendar, and social scheduling APIs when available.' },
+  { id: 'brand-system-lab', label: '🎨 Brand System Lab', icon: PaletteIcon, audience: 'Creative Studios', category: 'Brand Systems', prompt: 'Create a brand system workspace scene: generate a visual identity direction with logo mood, palette, type scale, art direction, and sample layouts; build a brand guidelines HTML artifact; generate supporting pattern and hero imagery; and add Thinklet tools for creating landing sections, social templates, email headers, and CRISPR-safe brand refreshes across existing artifacts.' },
+  { id: 'video-storyboard-room', label: '🎬 Video Storyboard Room', icon: VideoIcon, audience: 'Creative Studios', category: 'Motion Studio', prompt: 'Create a video production storyboard scene: build an HTML storyboard board with beats, camera moves, VO copy, shot list, asset needs, timing, and revision notes; generate cinematic keyframes for the hero moments; create a motion reference video prompt; and include Thinklet tools for converting client notes into shot revisions, production tasks, and export-ready prompt packs.' },
+  { id: 'client-presentation-factory', label: '✨ Client Presentation Factory', icon: PenToolIcon, audience: 'Creative Studios', category: 'Client Delivery', prompt: 'Create a client presentation factory scene: build a polished HTML review room with brief summary, creative territories, deliverables, timeline, comments, decision log, and next steps; generate premium mockup imagery for 3 directions; and add Thinklet tools for producing client-ready summaries, revision diffs, approval emails, and before-after CRISPR updates.' },
+
+  // ── Enterprise Ops ──
+  { id: 'executive-command-center', label: '🏢 Executive Command Center', icon: Building2Icon, audience: 'Enterprise Ops', category: 'Executive Ops', prompt: 'Create an executive command center scene: build a dense but elegant HTML dashboard with OKRs, revenue pulse, customer health, operational risks, product milestones, hiring priorities, and exec decisions; generate an executive briefing image; and add Thinklet agents for summarizing Slack, Gmail, Calendar, Linear, Jira, Salesforce, and Google Sheets data when integrations are connected.' },
+  { id: 'finance-close-room', label: '📊 Finance Close Room', icon: BarChart3Icon, audience: 'Enterprise Ops', category: 'Finance Ops', prompt: 'Create a finance close scene: build an HTML close cockpit with month-end checklist, variance analysis, cash runway, receivables, payables, vendor alerts, and approval queues; generate a clean finance visual; and add Thinklet tools for reconciling spreadsheet notes, drafting CFO summaries, and sending follow-ups through Gmail or Slack. Include optional Google Sheets, QuickBooks, Stripe, and Drive integrations.' },
+  { id: 'compliance-briefing-room', label: '🛡️ Compliance Briefing Room', icon: ShieldCheckIcon, audience: 'Enterprise Ops', category: 'Risk & Compliance', prompt: 'Create a compliance briefing scene: research relevant regulatory updates for a chosen industry, build an HTML risk register with policy changes, owners, evidence links, control status, and remediation timelines; generate a calm executive briefing visual; and add Thinklet tools that can watch Drive, Slack, Jira, GitHub, and policy docs for changes when connected.' },
+  { id: 'sop-automation-hub', label: '⚙️ SOP Automation Hub', icon: WorkflowIcon, audience: 'Enterprise Ops', category: 'Process Automation', prompt: 'Create an SOP automation scene: build an HTML process map with roles, handoffs, source systems, failure points, automation candidates, and audit trail; create Thinklet tools for turning SOP text into checklists, agents, and CRISPR updates; generate a diagram image; and include optional integrations for Notion, Google Docs, Slack, Jira, Linear, Airtable, and email.' },
+
+  // ── Sales & Customer Teams ──
+  { id: 'account-command-room', label: '🤝 Account Command Room', icon: HandshakeIcon, audience: 'Sales & Customer Teams', category: 'Revenue', prompt: 'Create a strategic account room scene: build an HTML account dossier with stakeholders, buying committee, pain points, open opportunities, relationship map, recent news, meeting notes, next actions, and renewal risk; generate an account-map visual; and add Thinklet tools for drafting follow-up emails, call briefs, and CRM updates using HubSpot, Salesforce, Gmail, Calendar, Slack, and LinkedIn-style research when connected.' },
+  { id: 'support-escalation-radar', label: '📡 Support Escalation Radar', icon: ActivityIcon, audience: 'Sales & Customer Teams', category: 'Customer Ops', prompt: 'Create a customer support escalation radar scene: build an HTML operations board with priority incidents, customer impact, sentiment, SLA clocks, owner lanes, root-cause notes, and executive-ready updates; generate a calm status-room image; and add Thinklet tools that can summarize tickets, Slack threads, emails, and product issues from Zendesk, Intercom, Jira, Linear, Gmail, and Slack when connected.' },
+  { id: 'outbound-personalization-studio', label: '✉️ Outbound Personalization Studio', icon: MailIcon, audience: 'Sales & Customer Teams', category: 'Outbound', prompt: 'Create an outbound personalization scene: research a target account list, build an HTML prospecting studio with personas, triggers, objection map, sequence plan, and message variants; generate a visual for each persona cluster; and add Thinklet tools for generating highly specific emails, LinkedIn notes, call openers, and CRM tasks through Gmail, HubSpot, Salesforce, Apollo-style lists, and Google Sheets when connected.' },
+  { id: 'renewal-health-desk', label: '💚 Renewal Health Desk', icon: UsersIcon, audience: 'Sales & Customer Teams', category: 'Revenue', prompt: 'Create a renewal health scene: build an HTML retention dashboard with account health, usage signals, champion status, open tickets, contract milestones, value proof, risk reasons, and save plays; generate one customer-success briefing image; and add Thinklet agents for pulling CRM, product analytics, support tickets, Slack mentions, Google Docs QBRs, and Calendar events when connected.' },
+
+  // ── Product & Design ──
+  { id: 'roadmap-control-room', label: '🧭 Roadmap Control Room', icon: BoxesIcon, audience: 'Product & Design', category: 'Product Strategy', prompt: 'Create a product roadmap scene: build an HTML roadmap control room with bets, evidence, customer requests, engineering confidence, launch windows, dependencies, and tradeoff notes; generate a product narrative visual; and add Thinklet tools for turning Slack threads, Linear or Jira issues, GitHub PRs, Notion docs, and customer interviews into roadmap updates when connected.' },
+  { id: 'ux-research-lab', label: '👁️ UX Research Lab', icon: EyeIcon, audience: 'Product & Design', category: 'User Research', prompt: 'Create a UX research lab scene: build an HTML synthesis board with interview clips, Jobs-to-be-Done, friction patterns, quote clusters, opportunity areas, and prototype recommendations; generate an empathy-map visual; and add Thinklet tools for summarizing transcripts, Drive notes, Figma-style comments, support tickets, and research docs into actionable product artifacts.' },
+  { id: 'design-system-auditor', label: '🧩 Design System Auditor', icon: PaletteIcon, audience: 'Product & Design', category: 'Design Systems', prompt: 'Create a design system audit scene: build an HTML audit board with components, accessibility issues, token gaps, visual inconsistencies, adoption metrics, and recommended fixes; generate before-after UI mockup images; and add Thinklet CRISPR tools that can update HTML artifacts to match the design system with precise find/replace patches.' },
+  { id: 'release-readiness-room', label: '🛠️ Release Readiness Room', icon: WrenchIcon, audience: 'Product & Design', category: 'Release Ops', prompt: 'Create a release readiness scene: build an HTML launch readiness room with feature checklist, QA status, risk register, migration notes, docs, comms, support prep, and rollback plan; generate a release hero visual; and add Thinklet tools for summarizing GitHub PRs, Linear tickets, docs, changelogs, Slack threads, and customer messaging when connected.' },
+
+  // ── Research & Intelligence ──
+  { id: 'competitor-intel-briefing', label: '🧠 Competitor Intel Briefing', icon: BrainIcon, audience: 'Research & Intelligence', category: 'Competitive Intel', prompt: 'Create a competitor intelligence scene: research top competitors and recent changes, build an HTML briefing room with product moves, pricing shifts, positioning, customer sentiment, feature gaps, threat level, and recommended counterplays; generate a market map image; and add Thinklet tools for monitoring websites, news, Google Sheets, Slack, and CRM notes when connected.' },
+  { id: 'policy-monitoring-room', label: '🌐 Policy Monitoring Room', icon: GlobeIcon, audience: 'Research & Intelligence', category: 'Regulatory', prompt: 'Create a policy monitoring scene: research current policy and regulatory updates for a chosen domain, build an HTML monitoring room with affected regions, deadlines, obligations, uncertainty, source links, and action owners; generate an executive policy visual; and add Thinklet tools for scheduled monitoring, source summaries, and stakeholder briefs through email, Slack, Drive, and Docs when connected.' },
+  { id: 'due-diligence-data-room', label: '🗄️ Due Diligence Data Room', icon: DatabaseIcon, audience: 'Research & Intelligence', category: 'Diligence', prompt: 'Create a due diligence data room scene: build an HTML diligence workspace with company overview, market, product, team, financials, risks, open questions, document checklist, and investment memo outline; generate a clean matrix visual; and add Thinklet tools for reading Drive folders, PDFs, spreadsheets, websites, and notes into structured diligence summaries when connected.' },
+  { id: 'academic-literature-map', label: '🎓 Literature Map Studio', icon: GraduationCapIcon, audience: 'Research & Intelligence', category: 'Knowledge Work', prompt: 'Create an academic literature map scene: research a topic, build an HTML evidence map with key papers, methods, findings, limitations, citation clusters, open questions, and recommended reading sequence; generate a concept-map image; and add Thinklet tools for summarizing PDFs, extracting claims, building flashcards, and exporting annotated notes to Docs or Notion when connected.' },
+
+  // ── Personal Operators ──
+  { id: 'personal-command-center', label: '📅 Personal Command Center', icon: CalendarIcon, audience: 'Personal Operators', category: 'Life OS', prompt: 'Create a personal command center scene: build an HTML life dashboard with today plan, priorities, calendar, inbox, notes, energy, habits, errands, and weekly review; generate a calming personal wallpaper image; and add Thinklet tools for turning rough notes into tasks, emails, calendar blocks, grocery lists, and planning docs using Gmail, Calendar, Todoist-style tasks, Notion, and Google Docs when connected.' },
+  { id: 'learning-sprint-studio', label: '📚 Learning Sprint Studio', icon: BookOpenIcon, audience: 'Personal Operators', category: 'Learning', prompt: 'Create a learning sprint scene: build an HTML study dashboard with goals, syllabus, source library, daily drills, quiz cards, progress streak, and project milestones; generate a subject-themed visual; and add Thinklet tools for summarizing videos/articles/PDFs, creating flashcards, planning sessions, and exporting notes to Drive, Docs, or Notion when connected.' },
+  { id: 'money-health-dashboard', label: '💰 Money Health Dashboard', icon: LineChartIcon, audience: 'Personal Operators', category: 'Finance', prompt: 'Create a personal money health scene: build an HTML dashboard with cash flow, bills, subscriptions, saving goals, debt payoff, investment watchlist, and spending patterns; generate a tasteful finance visual; and add Thinklet tools for importing CSVs, summarizing statements, drafting budget changes, and tracking goals through Sheets, email receipts, and finance APIs when connected.' },
+  { id: 'travel-life-planner', label: '✈️ Travel Life Planner', icon: GlobeIcon, audience: 'Personal Operators', category: 'Planning', prompt: 'Create a travel planning scene: research a destination, build an HTML trip room with itinerary, map-style sections, budget, packing list, reservations, local gems, weather, transit, and emergency info; generate destination imagery; create a short travel mood video prompt; and add Thinklet tools for organizing confirmations from Gmail, Calendar events, Drive docs, and Sheets when connected.' },
+  { id: 'wellness-recovery-room', label: '💪 Wellness Recovery Room', icon: HeartIcon, audience: 'Personal Operators', category: 'Wellness', prompt: 'Create a wellness recovery scene: build an HTML dashboard with sleep, workouts, meals, mobility, stress, recovery score, symptoms, and weekly reflections; generate a gentle wellness visual; and add Thinklet tools for turning notes into plans, summarizing wearable exports or CSVs, planning meals, and creating habit nudges through Calendar, email, and Sheets when connected.' },
+
+  // ── Advanced AI Workspaces ──
+  { id: 'agentic-api-control-tower', label: '🧬 API Control Tower', icon: CircuitBoardIcon, audience: 'Enterprise Ops', category: 'AI Operations', prompt: 'Create an agentic API control tower scene: build an HTML systems dashboard showing connected APIs, available actions, agent routes, permission boundaries, run history, error states, and approval gates; generate a technical architecture image; and add Thinklet tools for testing API actions, writing automation plans, creating rollback steps, and documenting every agent decision.' },
+  { id: 'commerce-merchandising-room', label: '🛍️ Commerce Merchandising Room', icon: ShoppingBagIcon, audience: 'Founders & Growth', category: 'Commerce', prompt: 'Create an ecommerce merchandising scene: research category trends, build an HTML merchandising cockpit with product performance, inventory, bundles, promotional calendar, ad creative needs, and customer review themes; generate product lifestyle images; and add Thinklet tools that can pull Shopify-style orders, Stripe revenue, Google Sheets inventory, support tickets, and marketing emails when connected.' },
+];
+
+export const DESKTOP_COMBO_PROMPTS = [
+  ...THINKLET_DEFAULT_PROMPTS.map(scene => withSceneWorkspaceContext({
+    audience: THINKLET_SCENES_AUDIENCE,
+    ...scene,
+  })),
+  ...PROFESSIONAL_SCENE_PROMPTS.map(withSceneWorkspaceContext),
 ];
