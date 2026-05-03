@@ -470,18 +470,7 @@ export const buildThinkletHtml = (reactCode) => {
     '  authorize:function(toolkit){return this.connect(toolkit);}\n' +
     '};\n' +
     // ── useToast ─────────────────────────────────────────────────────────────
-    'function useToast(){\n' +
-    '  return {toast:function(opts){\n' +
-    '    opts=opts||{};\n' +
-    '    var el=document.createElement("div");\n' +
-    '    var bg=opts.variant==="destructive"?"#ef4444":"#111827";\n' +
-    '    var bd=opts.variant==="destructive"?"rgba(255,255,255,.2)":"rgba(255,255,255,.1)";\n' +
-    '    el.style.cssText="position:fixed;bottom:16px;right:16px;z-index:9999;max-width:300px;padding:12px 16px;border-radius:10px;font-size:13px;line-height:1.4;box-shadow:0 8px 24px rgba(0,0,0,.4);transition:opacity .3s;background:"+bg+";color:#fff;border:1px solid "+bd;\n' +
-    '    el.innerHTML=(opts.title?"<strong>"+opts.title+"</strong>"+(opts.description?"<br>":""):"")+( opts.description||"");\n' +
-    '    document.body.appendChild(el);\n' +
-    '    setTimeout(function(){el.style.opacity="0";setTimeout(function(){el.remove();},300);},3200);\n' +
-    '  }};\n' +
-    '}\n' +
+    'function useToast(){return{toast:function(){}};}\n' +
     // ── MarkdownRenderer ─────────────────────────────────────────────────────
     'function MarkdownRenderer(props){\n' +
     '  var md=props.content||"";\n' +

@@ -7491,7 +7491,11 @@ Rules:
         history: [],
         future: [],
       }));
+      cleanArtifacts.forEach(artifact => {
+        if (artifact?.id) deletedDesktopArtifactIdsRef.current.delete(artifact.id);
+      });
       persistDesktopArtifacts(cleanArtifacts);
+      persistDesktopSceneFolders([]);
       if (snapshot.background) persistDesktopBackground(snapshot.background);
       setDesktopConnections(snapshot.connections || []);
       updateContentRef.current(TQL.set('desktopConnections', snapshot.connections || []));
@@ -7505,7 +7509,7 @@ Rules:
     } finally {
       setIsWorkspaceSnapshotBusy(false);
     }
-  }, [persistDesktopArtifacts, persistDesktopBackground, persistDesktopMaxZ, toast]);
+  }, [persistDesktopArtifacts, persistDesktopBackground, persistDesktopMaxZ, persistDesktopSceneFolders, toast]);
 
   const handleDeleteWorkspaceSnapshot = useCallback((snapshotId) => {
     persistWorkspaceSnapshots(prev => prev.filter(s => s.id !== snapshotId));
@@ -10323,6 +10327,65 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
   }, []);
 
   // ─── Close / Merge / Minimize / Maximize ────────────────────────────────
+  const cleanupDesktopArtifactReferences = useCallback((artifactIds, options = {}) => {
+    const ids = new Set((Array.isArray(artifactIds) ? artifactIds : [artifactIds]).filter(Boolean));
+    if (ids.size === 0) return;
+
+    setDesktopDropdownId(current => ids.has(current) ? null : current);
+    setDesktopActionsDropdownId(current => ids.has(current) ? null : current);
+    setDesktopAgencySetupId(current => ids.has(current) ? null : current);
+    setVersionPanelArtifactId(current => ids.has(current) ? null : current);
+    setFocusModeArtifactId(current => ids.has(current) ? null : current);
+    setDesktopVisualEditId(current => ids.has(current) ? null : current);
+    setPendingMerge(current => (
+      current && (ids.has(current.sourceId) || ids.has(current.targetId))
+        ? null
+        : current
+    ));
+
+    if (ids.has(connectingFromIdRef.current)) {
+      setIsConnecting(false);
+      setConnectingFromId(null);
+      setConnectMousePos(null);
+    }
+
+    if (options.removeSceneMembership !== false) {
+      persistDesktopSceneFolders(prev => prev
+        .map(folder => ({
+          ...folder,
+          artifactIds: (folder.artifactIds || []).filter(id => !ids.has(id)),
+        }))
+        .filter(folder => folder.artifactIds.length > 0));
+    }
+
+    setDesktopConnections(prev => {
+      const next = prev.filter(conn => !ids.has(conn.fromId) && !ids.has(conn.toId));
+      if (next.length === prev.length) return prev;
+      desktopConnectionsRef.current = next;
+      updateContentRef.current(TQL.set('desktopConnections', next));
+      return next;
+    });
+
+    setDesktopStacks(prev => {
+      let changed = false;
+      const next = prev
+        .map(stack => {
+          const artifactIds = (stack.artifactIds || []).filter(id => !ids.has(id));
+          if (artifactIds.length !== (stack.artifactIds || []).length) changed = true;
+          return { ...stack, artifactIds };
+        })
+        .filter(stack => {
+          const keep = stack.artifactIds.length > 0;
+          if (!keep) changed = true;
+          return keep;
+        });
+      if (!changed) return prev;
+      setSelectedStackId(current => next.some(stack => stack.id === current) ? current : null);
+      updateContentRef.current(TQL.set('desktopStacks', next));
+      return next;
+    });
+  }, [persistDesktopSceneFolders]);
+
   const handleRestoreAllDesktopArtifacts = useCallback(() => {
     persistDesktopArtifacts(prev => prev.map(a => ({ ...a, isMinimized: false })));
     persistDesktopSceneFolders([]);
@@ -10330,9 +10393,10 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
   }, [persistDesktopArtifacts, persistDesktopSceneFolders]);
 
   const handleCollapseDesktopToSceneFolder = useCallback(() => {
-    const artifacts = (desktopArtifactsRef.current || []).filter(artifact => artifact?.id);
+    const artifacts = (desktopArtifactsRef.current || [])
+      .filter(artifact => artifact?.id && !artifact.isMinimized);
     if (artifacts.length === 0) {
-      toast({ title: 'Nothing to collapse', description: 'Create a few artifacts and they can become a scene folder.' });
+      toast({ title: 'Nothing to collapse', description: 'Open windows can become a fresh scene folder.' });
       return;
     }
 
@@ -10366,10 +10430,13 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
         ? { ...artifact, isMinimized: true, isMaximized: false }
         : artifact
     )));
+    setFocusModeArtifactId(current => artifactIds.includes(current) ? null : current);
+    setDesktopDropdownId(null);
+    setDesktopActionsDropdownId(null);
     setDesktopTaskbarDropupOpen(false);
     toast({
       title: 'Scene collapsed',
-      description: `${artifacts.length} artifact${artifacts.length === 1 ? '' : 's'} tucked into one dock folder.`,
+      description: `${artifacts.length} open artifact${artifacts.length === 1 ? '' : 's'} tucked into a new dock folder.`,
     });
   }, [persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
 
@@ -10391,25 +10458,47 @@ Square 1:1 composition. Make it feel like the next tile in an infinite zoom from
     const folder = desktopSceneFolders.find(item => item.id === folderId);
     if (!folder) return;
     const ids = new Set(folder.artifactIds || []);
+    cleanupDesktopArtifactReferences([...ids], { removeSceneMembership: false });
     ids.forEach(id => deletedDesktopArtifactIdsRef.current.add(id));
     persistDesktopArtifacts(prev => prev.filter(artifact => !ids.has(artifact.id)));
     ids.forEach(id => deleteArtifactData(id).catch(() => {}));
     persistDesktopSceneFolders(prev => prev.filter(item => item.id !== folderId));
     setDesktopTaskbarDropupOpen(false);
     toast({ title: 'Scene closed', description: `${ids.size} artifact${ids.size === 1 ? '' : 's'} removed from the dock.` });
-  }, [desktopSceneFolders, persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
+  }, [cleanupDesktopArtifactReferences, desktopSceneFolders, persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
 
   const handleDesktopCloseArtifact = useCallback((artifactId) => {
+    if (!artifactId) return;
     deletedDesktopArtifactIdsRef.current.add(artifactId);
+    cleanupDesktopArtifactReferences(artifactId);
     persistDesktopArtifacts(prev => prev.filter(a => a.id !== artifactId));
-    persistDesktopSceneFolders(prev => prev
-      .map(folder => ({
-        ...folder,
-        artifactIds: (folder.artifactIds || []).filter(id => id !== artifactId),
-      }))
-      .filter(folder => folder.artifactIds.length > 0));
     deleteArtifactData(artifactId).catch(() => {});
-  }, [persistDesktopArtifacts, persistDesktopSceneFolders]);
+  }, [cleanupDesktopArtifactReferences, persistDesktopArtifacts]);
+
+  const handleClearDesktopArtifacts = useCallback(async () => {
+    const artifacts = (desktopArtifactsRef.current || []).filter(artifact => artifact?.id);
+    if (artifacts.length === 0) {
+      setShowClearDesktopConfirm(false);
+      setIsDesktopSettingsOpen(false);
+      toast({ title: "Nothing to clear", description: "Desktop is already empty" });
+      return;
+    }
+
+    await handleCreateWorkspaceSnapshot('Before clear', { silent: true });
+    const artifactIds = artifacts.map(artifact => artifact.id);
+    artifactIds.forEach(id => deletedDesktopArtifactIdsRef.current.add(id));
+    cleanupDesktopArtifactReferences(artifactIds, { removeSceneMembership: false });
+    persistDesktopArtifacts([]);
+    artifactIds.forEach(id => deleteArtifactData(id).catch(() => {}));
+    persistDesktopSceneFolders([]);
+    setShowClearDesktopConfirm(false);
+    setIsDesktopSettingsOpen(false);
+    setDesktopTaskbarDropupOpen(false);
+    toast({
+      title: "Cleared",
+      description: `Removed ${artifacts.length} artifact${artifacts.length !== 1 ? 's' : ''}`,
+    });
+  }, [cleanupDesktopArtifactReferences, handleCreateWorkspaceSnapshot, persistDesktopArtifacts, persistDesktopSceneFolders, toast]);
 
   const escapeHtmlAttribute = useCallback((value) => String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -10624,7 +10713,10 @@ PLACEMENT RULES:
 
     if (!target.isMinimized) {
       // Minimize — idempotent. Re-running just keeps it minimized.
-      persistDesktopArtifacts(prev => prev.map(a => a.id === artifactId ? { ...a, isMinimized: true } : a));
+      persistDesktopArtifacts(prev => prev.map(a => a.id === artifactId ? { ...a, isMinimized: true, isMaximized: false } : a));
+      setFocusModeArtifactId(current => current === artifactId ? null : current);
+      setDesktopDropdownId(current => current === artifactId ? null : current);
+      setDesktopActionsDropdownId(current => current === artifactId ? null : current);
       return;
     }
 
@@ -10636,6 +10728,7 @@ PLACEMENT RULES:
         artifactIds: (folder.artifactIds || []).filter(id => id !== artifactId),
       }))
       .filter(folder => folder.artifactIds.length > 0));
+    setDesktopTaskbarDropupOpen(false);
     const canvas = desktopContainerRef.current;
     const canvasH = canvas?.clientHeight || (window.innerHeight - 76);
     const canvasW = canvas?.clientWidth || window.innerWidth;
@@ -14845,20 +14938,7 @@ Output JSON only (no markdown fences):
                             <div className={`my-2 h-px ${desktopLightMode ? 'bg-slate-200/70' : 'bg-white/[0.07]'}`} />
 
                             <button
-                              onClick={async () => {
-                                if (desktopArtifacts.length === 0) {
-                                  toast({ title: "Nothing to clear", description: "Desktop is already empty" });
-                                  return;
-                                }
-                                await handleCreateWorkspaceSnapshot('Before clear', { silent: true });
-                                desktopArtifacts.forEach(artifact => {
-                                  if (artifact?.id) deletedDesktopArtifactIdsRef.current.add(artifact.id);
-                                });
-                                persistDesktopArtifacts([]);
-                                persistDesktopSceneFolders([]);
-                                setIsDesktopSettingsOpen(false);
-                                toast({ title: "Cleared", description: `Removed ${desktopArtifacts.length} artifact${desktopArtifacts.length !== 1 ? 's' : ''}` });
-                              }}
+                              onClick={handleClearDesktopArtifacts}
                               className={popoverItemClass(false, 'rose')}
                             >
                               <div className={popoverIconClass('rose')}>
@@ -18098,12 +18178,7 @@ Output JSON only (no markdown fences):
                             Cancel
                           </button>
                           <button
-                            onClick={async () => {
-                              await handleCreateWorkspaceSnapshot('Before clear', { silent: true });
-                              persistDesktopArtifacts(() => []);
-                              persistDesktopSceneFolders([]);
-                              setShowClearDesktopConfirm(false);
-                            }}
+                            onClick={handleClearDesktopArtifacts}
                             className="flex-1 py-2 px-4 rounded-xl text-xs font-semibold bg-red-500 hover:bg-red-600 text-white transition-colors"
                           >
                             Clear All
