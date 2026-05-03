@@ -70,6 +70,33 @@ const getDraftNotes = (draft) => {
   return [];
 };
 
+const AUTOMATION_RECIPES = [
+  {
+    title: 'Research to dashboard',
+    prompt: 'Research a topic, extract the strongest signals, turn them into a live dashboard, and keep a summary ready for sharing.',
+    detail: 'Source brief -> analyst -> dashboard',
+    tone: 'from-cyan-400 to-blue-500',
+  },
+  {
+    title: 'Lead triage loop',
+    prompt: 'When a new lead arrives, enrich the company, classify urgency, draft outreach, and prepare the next CRM or email action for review.',
+    detail: 'Intake -> research -> draft -> approval',
+    tone: 'from-emerald-400 to-teal-500',
+  },
+  {
+    title: 'Creative production line',
+    prompt: 'Take a product idea, create visual directions, generate media assets, and assemble a polished launch page with critique and revision steps.',
+    detail: 'Brief -> assets -> page -> critic',
+    tone: 'from-violet-400 to-fuchsia-500',
+  },
+  {
+    title: 'Ops watcher',
+    prompt: 'Watch incoming data, detect anomalies, summarize what changed, and route the update to the right downstream Thinklet.',
+    detail: 'Event -> monitor -> summarize -> route',
+    tone: 'from-amber-300 to-orange-500',
+  },
+];
+
 export function AutomationStudioModal({
   isOpen,
   onClose,
@@ -292,6 +319,67 @@ export function AutomationStudioModal({
     { label: 'More Spacing', instruction: 'Increase padding and margins throughout. Add better separation between sections and controls.' },
     { label: 'Polish UI', instruction: 'Improve visual polish, alignment, hover states, empty states, and content density while preserving functionality.' },
   ];
+  const hasAnyRuns = agentRuns.length > 0;
+  const hasCompletedRuns = agentRuns.some(run => run.status === 'success');
+  const hasActiveRuns = runningRuns.length > 0;
+  const hasAppliedAutomation = connections.length > 0 || stacks.some(stack => stack.automation || stack.createdBy === 'automation-studio');
+  const journeySteps = [
+    {
+      label: 'Gather',
+      detail: artifacts.length ? `${artifacts.length} window${artifacts.length !== 1 ? 's' : ''} on desktop` : 'Create or import artifacts',
+      status: artifacts.length ? 'done' : 'current',
+      icon: LayoutIcon,
+    },
+    {
+      label: 'Architect',
+      detail: automationDraft ? 'Automation draft ready' : 'Describe the outcome',
+      status: automationDraft ? 'done' : artifacts.length ? 'current' : 'idle',
+      icon: BrainIcon,
+    },
+    {
+      label: 'Preflight',
+      detail: automationDraft ? `${preflightItems.filter(item => item.status === 'ok').length}/${preflightItems.length} checks clear` : 'Validate edges and apps',
+      status: automationDraft && unresolvedDraftEdges.length === 0 && draftSource ? 'done' : automationDraft ? 'current' : 'idle',
+      icon: CheckIcon,
+    },
+    {
+      label: 'Wire',
+      detail: connections.length ? `${connections.length} edge${connections.length !== 1 ? 's' : ''}, ${stacks.length} chain${stacks.length !== 1 ? 's' : ''}` : 'Apply the draft',
+      status: hasAppliedAutomation ? 'done' : automationDraft ? 'current' : 'idle',
+      icon: GitBranchIcon,
+    },
+    {
+      label: 'Run',
+      detail: hasActiveRuns ? `${runningRuns.length} running` : hasAnyRuns ? `${agentRuns.length} run${agentRuns.length !== 1 ? 's' : ''} captured` : 'Launch and inspect',
+      status: hasActiveRuns ? 'current' : hasCompletedRuns ? 'done' : hasAppliedAutomation ? 'current' : 'idle',
+      icon: PlayIcon,
+    },
+    {
+      label: 'Observe',
+      detail: busKeys.length ? `${busKeys.length} live bus key${busKeys.length !== 1 ? 's' : ''}` : 'Watch outputs and handoffs',
+      status: busKeys.length ? 'done' : hasAnyRuns ? 'current' : 'idle',
+      icon: ActivityIcon,
+    },
+  ];
+  const draftUserJourney = Array.isArray(automationDraft?.userJourney)
+    ? automationDraft.userJourney
+    : draftEdges.length
+      ? [
+          `Start by running ${draftSource?.title || draftEdges[0]?.fromTitle || draftEdges[0]?.from || 'the source Thinklet'}.`,
+          ...draftEdges.slice(0, 3).map(edge => {
+            const from = edge.fromTitle || edge.from || edge.sourceTitle || edge.source || 'Source';
+            const to = edge.toTitle || edge.to || edge.targetTitle || edge.target || 'Target';
+            return `${from} passes its structured result to ${to}${edge.busKey ? ` through ${edge.busKey}` : ''}.`;
+          }),
+          'Open Runs to see each input, result, and failure reason before trusting the workflow.',
+        ]
+      : [];
+  const draftSuccessCriteria = Array.isArray(automationDraft?.successCriteria)
+    ? automationDraft.successCriteria
+    : [];
+  const draftSafeguards = Array.isArray(automationDraft?.safeguards)
+    ? automationDraft.safeguards
+    : [];
 
   return (
     <AnimatePresence>
@@ -382,6 +470,43 @@ export function AutomationStudioModal({
                   );
                 })}
               </div>
+
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+                {journeySteps.map((step, idx) => {
+                  const Icon = step.icon;
+                  const isDone = step.status === 'done';
+                  const isCurrent = step.status === 'current';
+                  return (
+                    <div
+                      key={step.label}
+                      className={`rounded-xl border px-3 py-2 transition-colors ${
+                        isDone
+                          ? desktopLightMode ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-emerald-500/12 border-emerald-500/22 text-emerald-200'
+                          : isCurrent
+                            ? desktopLightMode ? 'bg-cyan-50 border-cyan-100 text-cyan-800 shadow-sm' : 'bg-cyan-500/12 border-cyan-500/25 text-cyan-200'
+                            : desktopLightMode ? 'bg-white/60 border-white text-gray-400' : 'bg-white/[0.035] border-white/8 text-gray-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-lg text-[10px] font-black ${
+                          isDone
+                            ? desktopLightMode ? 'bg-emerald-500 text-white' : 'bg-emerald-400/20 text-emerald-200'
+                            : isCurrent
+                              ? desktopLightMode ? 'bg-cyan-600 text-white' : 'bg-cyan-400/20 text-cyan-100'
+                              : desktopLightMode ? 'bg-gray-100 text-gray-400' : 'bg-white/8 text-gray-500'
+                        }`}>
+                          {isDone ? <CheckIcon className="h-3 w-3" /> : idx + 1}
+                        </span>
+                        <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                        <span className="truncate text-[10px] font-black uppercase tracking-wider">{step.label}</span>
+                      </div>
+                      <div className={`mt-1 truncate text-[10px] ${isDone || isCurrent ? '' : desktopLightMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {step.detail}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className={`flex-1 overflow-hidden ${desktopLightMode ? 'bg-gray-50/70' : 'bg-gray-950'}`}>
@@ -437,6 +562,38 @@ export function AutomationStudioModal({
                             {chip}
                           </button>
                         ))}
+                      </div>
+
+                      <div className={`rounded-2xl border p-3 ${subtlePanelClass}`}>
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <div className={`text-[11px] font-black uppercase tracking-wider ${desktopLightMode ? 'text-gray-700' : 'text-gray-300'}`}>Magic Starting Points</div>
+                            <div className={`mt-0.5 text-[10px] ${mutedTextClass}`}>Tap one, tweak the prompt, then let the architect wire it.</div>
+                          </div>
+                          <SparklesIcon className="h-4 w-4 text-violet-400" />
+                        </div>
+                        <div className="grid gap-2">
+                          {AUTOMATION_RECIPES.map(recipe => (
+                            <button
+                              key={recipe.title}
+                              onClick={() => setStackAgentInput(recipe.prompt)}
+                              className={`group w-full rounded-xl border p-3 text-left transition-all ${
+                                desktopLightMode
+                                  ? 'bg-white border-gray-100 hover:border-violet-200 hover:shadow-sm'
+                                  : 'bg-black/20 border-white/8 hover:border-violet-400/30 hover:bg-white/[0.055]'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`mt-0.5 h-8 w-8 flex-shrink-0 rounded-xl bg-gradient-to-br ${recipe.tone} shadow-lg shadow-black/10`} />
+                                <div className="min-w-0 flex-1">
+                                  <div className={`text-xs font-black ${desktopLightMode ? 'text-gray-900' : 'text-white'}`}>{recipe.title}</div>
+                                  <div className={`mt-1 text-[10px] leading-relaxed ${mutedTextClass}`}>{recipe.detail}</div>
+                                </div>
+                                <SendIcon className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${desktopLightMode ? 'text-gray-300 group-hover:text-violet-500' : 'text-white/20 group-hover:text-violet-300'}`} />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       <div className={`rounded-2xl border p-4 ${subtlePanelClass}`}>
@@ -544,7 +701,51 @@ export function AutomationStudioModal({
                             {automationDraft.confidence && (
                               <div className={`mt-2 text-[10px] font-bold uppercase tracking-wider ${desktopLightMode ? 'text-cyan-700' : 'text-cyan-300'}`}>Confidence: {automationDraft.confidence}</div>
                             )}
+                            {draftUserJourney.length > 0 && (
+                              <div className={`mt-4 rounded-xl border px-3 py-3 ${desktopLightMode ? 'bg-white/78 border-white' : 'bg-black/18 border-white/8'}`}>
+                                <div className={`mb-2 text-[10px] font-black uppercase tracking-wider ${desktopLightMode ? 'text-gray-600' : 'text-white/48'}`}>What the user will see</div>
+                                <div className="space-y-1.5">
+                                  {draftUserJourney.slice(0, 5).map((step, idx) => (
+                                    <div key={`${step}-${idx}`} className="flex gap-2">
+                                      <span className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-black ${desktopLightMode ? 'bg-cyan-100 text-cyan-700' : 'bg-cyan-400/15 text-cyan-200'}`}>{idx + 1}</span>
+                                      <span className={`text-[11px] leading-relaxed ${bodyTextClass}`}>{typeof step === 'string' ? step : step.detail || step.label || JSON.stringify(step)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
+
+                          {(draftSuccessCriteria.length > 0 || draftSafeguards.length > 0) && (
+                            <div className="grid md:grid-cols-2 gap-3">
+                              {draftSuccessCriteria.length > 0 && (
+                                <div className={`rounded-2xl border p-4 ${subtlePanelClass}`}>
+                                  <span className={`text-[11px] font-black uppercase tracking-wider block mb-2 ${labelClass}`}>Success Looks Like</span>
+                                  <div className="space-y-1.5">
+                                    {draftSuccessCriteria.slice(0, 5).map((item, idx) => (
+                                      <div key={`${item}-${idx}`} className={`text-[11px] flex gap-2 ${mutedTextClass}`}>
+                                        <CheckIcon className="w-3 h-3 mt-0.5 text-emerald-400 flex-shrink-0" />
+                                        <span>{typeof item === 'string' ? item : item.detail || item.label || JSON.stringify(item)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {draftSafeguards.length > 0 && (
+                                <div className={`rounded-2xl border p-4 ${subtlePanelClass}`}>
+                                  <span className={`text-[11px] font-black uppercase tracking-wider block mb-2 ${labelClass}`}>Safeguards</span>
+                                  <div className="space-y-1.5">
+                                    {draftSafeguards.slice(0, 5).map((item, idx) => (
+                                      <div key={`${item}-${idx}`} className={`text-[11px] flex gap-2 ${mutedTextClass}`}>
+                                        <AlertTriangleIcon className="w-3 h-3 mt-0.5 text-amber-400 flex-shrink-0" />
+                                        <span>{typeof item === 'string' ? item : item.detail || item.label || JSON.stringify(item)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           <div className="grid md:grid-cols-2 gap-3">
                             <div className={`rounded-2xl border p-4 ${subtlePanelClass}`}>

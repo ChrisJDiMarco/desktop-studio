@@ -2528,6 +2528,7 @@ function ArtifactWindowInner({
   artifact,
   appProject,
   buildJob,
+  automationMeta,
   isCrisprActive, crisprInput, isCrisprPending, crisprStatus,
   isDropdownOpen, isActionsDropdownOpen, isAgencySetup, isAutoActive, isBeautifyActive,
   isConnecting, connectingFromId,
@@ -2548,6 +2549,7 @@ function ArtifactWindowInner({
   handleInteractiveZoomClick, handleInteractiveZoomBack,
   handleDesktopUndo, handleDesktopRedo,
   handleCompleteConnection, handleStartConnection,
+  onOpenAutomationStudio,
   handleLaunchAgency, updateRecentGenerations, toast,
   isVisualEditMode, onToggleVisualEdit,
   isVisible = true,
@@ -2615,6 +2617,17 @@ function ArtifactWindowInner({
                   const isAutomationActive = isAutoActive || isBeautifyActive;
                   const automationLabel = isBeautifyActive ? 'Beautifying...' : 'Auto-Improving...';
                   const automationStopTitle = isBeautifyActive ? 'Stop beautify' : 'Stop auto-improve';
+                  const automationPillClass = (() => {
+                    const tone = automationMeta?.tone;
+                    if (tone === 'red') return 'border-red-400/30 bg-red-500/15 text-red-200';
+                    if (tone === 'emerald') return 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200';
+                    if (tone === 'blue') return 'border-blue-400/30 bg-blue-500/15 text-blue-200';
+                    if (tone === 'cyan') return 'border-cyan-400/30 bg-cyan-500/15 text-cyan-200';
+                    return 'border-violet-400/28 bg-violet-500/14 text-violet-200';
+                  })();
+                  const automationEdgeLabel = automationMeta
+                    ? `${automationMeta.inbound || 0} in · ${automationMeta.outbound || 0} out${automationMeta.chains ? ` · ${automationMeta.chains} chain${automationMeta.chains !== 1 ? 's' : ''}` : ''}`
+                    : '';
                   // eslint-disable-next-line react-hooks/rules-of-hooks
                   useEffect(() => {
                     if (isActionsDropdownOpen && actionsAnchorRef.current) {
@@ -2761,6 +2774,17 @@ function ArtifactWindowInner({
                               {artifact.title}
                             </span>
                             <div className="relative flex items-center gap-1 justify-end desktop-artifact-dropdown">
+                              {automationMeta && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); onOpenAutomationStudio?.(artifact.id); }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className={`hidden sm:flex max-w-[150px] items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors hover:border-cyan-300/60 ${automationPillClass}`}
+                                  title={`${automationMeta.statusLabel || 'Automation'} · ${automationEdgeLabel || 'No edges yet'}`}
+                                >
+                                  <NetworkIcon className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate">{automationMeta.statusLabel || 'Automation'}</span>
+                                </button>
+                              )}
                               {artifact.type === 'image' && artifact.mediaUrl && (
                                 <div className="relative">
                                   <button
@@ -3436,6 +3460,20 @@ function ArtifactWindowInner({
                             {artifact.title}
                           </span>
                           <div className="relative flex items-center gap-1 justify-end desktop-artifact-dropdown">
+                            {automationMeta && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); onOpenAutomationStudio?.(artifact.id); }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className={`hidden sm:flex max-w-[170px] items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors hover:border-cyan-300/60 ${automationPillClass}`}
+                                title={`${automationMeta.statusLabel || 'Automation'} · ${automationEdgeLabel || 'No edges yet'}`}
+                              >
+                                <NetworkIcon className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">{automationMeta.statusLabel || 'Automation'}</span>
+                                {(automationMeta.inbound || automationMeta.outbound) > 0 && (
+                                  <span className="font-mono opacity-70">{automationMeta.inbound || 0}/{automationMeta.outbound || 0}</span>
+                                )}
+                              </button>
+                            )}
                             {/* Beautify button + panel */}
                             <div className="relative">
                               <button
@@ -4061,6 +4099,7 @@ function areArtifactWindowPropsEqual(prev, next) {
     prev.artifact === next.artifact &&
     prev.appProject === next.appProject &&
     prev.buildJob === next.buildJob &&
+    prev.automationMeta === next.automationMeta &&
     prev.isCrisprActive === next.isCrisprActive &&
     prev.crisprInput === next.crisprInput &&
     prev.isCrisprPending === next.isCrisprPending &&
@@ -5908,6 +5947,80 @@ Return a NEW design system JSON — same format, modified per instruction. Retur
     }
     return map;
   }, [appProjects]);
+  const automationMetaByArtifactId = useMemo(() => {
+    void desktopAutomationVersion;
+    const map = new Map();
+    const ensure = (id) => {
+      if (!id) return null;
+      if (!map.has(id)) {
+        map.set(id, {
+          inbound: 0,
+          outbound: 0,
+          chains: 0,
+          isLiveAgent: false,
+          isAutomationAgent: false,
+          latestRun: null,
+        });
+      }
+      return map.get(id);
+    };
+    for (const conn of desktopConnections || []) {
+      const from = ensure(conn.fromId);
+      const to = ensure(conn.toId);
+      if (from) from.outbound += 1;
+      if (to) to.inbound += 1;
+    }
+    for (const stack of desktopStacks || []) {
+      for (const id of stack.artifactIds || []) {
+        const meta = ensure(id);
+        if (meta) meta.chains += 1;
+      }
+    }
+    const registry = desktopAgentRegistryRef.current || {};
+    for (const artifact of desktopArtifacts) {
+      const meta = ensure(artifact.id);
+      if (!meta) continue;
+      meta.isLiveAgent = !!registry[artifact.id];
+      meta.isAutomationAgent = !!(artifact.automationAgent || artifact.agentSpec || artifact.agentManifest || artifact.language === 'react');
+      meta.agentName = registry[artifact.id]?.manifest?.name || artifact.agentSpec?.name || artifact.agentManifest?.name || artifact.title;
+    }
+    for (const run of desktopAgentRunsRef.current || []) {
+      const ids = [run.targetArtifactId, run.sourceArtifactId].filter(Boolean);
+      for (const id of ids) {
+        const meta = ensure(id);
+        if (!meta || meta.latestRun) continue;
+        meta.latestRun = run;
+      }
+    }
+    for (const [id, meta] of map.entries()) {
+      if (!meta.isAutomationAgent && !meta.isLiveAgent && meta.inbound === 0 && meta.outbound === 0 && meta.chains === 0 && !meta.latestRun) {
+        map.delete(id);
+        continue;
+      }
+      const status = meta.latestRun?.status;
+      meta.statusLabel = status === 'error'
+        ? 'Needs review'
+        : status === 'success'
+          ? 'Last run passed'
+          : status && !['skipped', 'canceled'].includes(status)
+            ? 'Running'
+            : meta.isLiveAgent
+              ? 'Live agent'
+              : meta.isAutomationAgent
+                ? 'Agent ready'
+                : 'Connected';
+      meta.tone = status === 'error'
+        ? 'red'
+        : status === 'success'
+          ? 'emerald'
+          : status && !['skipped', 'canceled'].includes(status)
+            ? 'blue'
+            : meta.outbound || meta.inbound
+              ? 'cyan'
+              : 'violet';
+    }
+    return map;
+  }, [desktopArtifacts, desktopConnections, desktopStacks, desktopAutomationVersion]);
   const versionPanelArtifact = useMemo(
     () => desktopArtifacts.find(a => a.id === versionPanelArtifactId) || null,
     [desktopArtifacts, versionPanelArtifactId]
@@ -7155,6 +7268,15 @@ Rules:
     }));
   }, [handleDesktopBringToFront, persistDesktopArtifacts]);
 
+  const handleOpenAutomationForArtifact = useCallback((artifactId) => {
+    if (artifactId) handleFocusArtifact(artifactId);
+    setAutomationStudioTab('graph');
+    setShowBusMonitor(false);
+    setShowPromptHistory(false);
+    setShowRelationshipPanel(false);
+    setIsStackPanelOpen(true);
+  }, [handleFocusArtifact]);
+
   const handleClampWorkspaceWindows = useCallback(() => {
     const canvasW = desktopContainerRef.current?.clientWidth || window.innerWidth;
     const canvasH = desktopContainerRef.current?.clientHeight || (window.innerHeight - 76);
@@ -7268,10 +7390,26 @@ Rules:
         });
       } catch (_) { /* skip un-snapshottable values */ }
     }
+    const sourceArtifact = desktopArtifactsRef.current.find(a => a.id === fromId);
+    const targetArtifact = desktopArtifactsRef.current.find(a => a.id === targetId);
+    const sourceOutputKey = normalizeBusKey(
+      publishedKeys[0]?.key ||
+      sourceArtifact?.agentSpec?.outputKey ||
+      sourceArtifact?.agentManifest?.outputKey ||
+      sourceArtifact?.agentManifest?.outputs?.[0]?.key ||
+      `agent.${fromId}.result`
+    );
     const newConn = {
       id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       fromId,
       toId: targetId,
+      mode: 'automation',
+      busKey: sourceOutputKey,
+      label: 'manual automation edge',
+      reason: sourceArtifact && targetArtifact
+        ? `${sourceArtifact.title || 'Source'} can publish structured output into ${targetArtifact.title || 'target'}`
+        : 'Manual artifact handoff',
+      createdBy: 'user-link',
       createdAt: Date.now(),
       schema: publishedKeys.length > 0 ? { publishedKeys, capturedAt: Date.now() } : null,
     };
@@ -10572,6 +10710,9 @@ Return this exact shape:
     { "from": "Exact source agent name", "to": "Exact target agent name", "busKey": "source.output.key", "reason": "what passes downstream" }
   ],
   "runNow": { "agent": "Exact first agent name", "input": { "request": "the user's request" } },
+  "userJourney": ["what the user will see first", "what happens after each agent runs", "where they should inspect or approve"],
+  "successCriteria": ["observable condition that proves the automation worked"],
+  "safeguards": ["approval, dry-run, or non-destructive behavior to preserve user trust"],
   "notes": ["plain-English note for the novice user"]
 }`, 60_000);
 
@@ -10814,6 +10955,22 @@ Return this exact shape:
           applied: true,
         }],
         runNow: plan?.runNow || { agent: agents[0]?.name, input: { request: prompt } },
+        userJourney: Array.isArray(plan?.userJourney) && plan.userJourney.length ? plan.userJourney : [
+          `Thinklet creates ${agents.length} agent window${agents.length !== 1 ? 's' : ''} and wires them into one visible workflow.`,
+          runMode === 'bus'
+            ? 'The first agent waits for an event instead of running immediately.'
+            : `The first agent runs now, then publishes to ${agents[0]?.outputKey || `${workflowSlug}.intake`}.`,
+          'Automation Studio opens to Runs so the user can inspect every input, output, and failure reason.',
+        ],
+        successCriteria: Array.isArray(plan?.successCriteria) ? plan.successCriteria : [
+          'Every directed edge resolves to an existing Thinklet.',
+          'The first run produces a structured result in the Runs tab.',
+          'Downstream agents receive bus payloads without manual copy/paste.',
+        ],
+        safeguards: Array.isArray(plan?.safeguards) ? plan.safeguards : [
+          'External app actions are prepared for review unless the user explicitly asks to perform them.',
+          'The run log keeps inputs, outputs, skipped steps, and errors visible.',
+        ],
         notes: Array.isArray(plan?.notes) ? plan.notes : [
           'Automation mode created runnable Thinklet agents and wired them with directed bus edges.',
           'Open the Runs tab to inspect each event and agent handoff.',
@@ -13073,6 +13230,9 @@ Schema:
     "targetTitle": "exact title of the first/source agent to run",
     "input": {"task": "structured input to start the automation"}
   },
+  "userJourney": ["what the user sees first", "what happens after each handoff", "where the user should inspect, approve, or adjust"],
+  "successCriteria": ["observable condition that proves the automation worked"],
+  "safeguards": ["how the workflow avoids destructive or surprising actions"],
   "notes": ["important caveat or next step"]
 }`;
 
@@ -13085,6 +13245,9 @@ Schema:
           confidence: 'low',
           edges: [],
           stacks: [],
+          userJourney: ['The architect returned a freeform answer, so Thinklet cannot safely apply edges automatically yet.'],
+          successCriteria: [],
+          safeguards: ['Review the freeform response and ask the architect again with exact artifact names.'],
           notes: ['The response was not valid JSON, so no edges can be applied automatically yet.'],
         };
       }
@@ -13095,6 +13258,9 @@ Schema:
         edges: Array.isArray(parsed.edges) ? parsed.edges : Array.isArray(parsed.connections) ? parsed.connections : [],
         stacks: Array.isArray(parsed.stacks) ? parsed.stacks : Array.isArray(parsed.suggestedStacks) ? parsed.suggestedStacks : [],
         runNow: parsed.runNow && typeof parsed.runNow === 'object' ? parsed.runNow : null,
+        userJourney: Array.isArray(parsed.userJourney) ? parsed.userJourney : [],
+        successCriteria: Array.isArray(parsed.successCriteria) ? parsed.successCriteria : [],
+        safeguards: Array.isArray(parsed.safeguards) ? parsed.safeguards : [],
         notes: Array.isArray(parsed.notes) ? parsed.notes : Array.isArray(parsed.risks) ? parsed.risks : [],
       };
     },
@@ -13305,6 +13471,7 @@ Schema:
     const target = resolveAutomationArtifact(
       runNow.targetId ||
       runNow.targetTitle ||
+      runNow.agent ||
       firstEdge?.fromId ||
       firstEdge?.fromTitle ||
       firstEdge?.from ||
@@ -16680,6 +16847,7 @@ Output JSON only (no markdown fences):
                     artifact={artifact}
                     appProject={appProjectByArtifactId.get(artifact.id) || null}
                     buildJob={generationJobByArtifactId.get(artifact.id) || null}
+                    automationMeta={automationMetaByArtifactId.get(artifact.id) || null}
                     isCrisprActive={desktopCrisprIds.has(artifact.id)}
                     crisprInput={desktopCrisprInputs[artifact.id] || ''}
                     isCrisprPending={desktopCrisprPendingIds.has(artifact.id)}
@@ -16731,6 +16899,7 @@ Output JSON only (no markdown fences):
                     handleDesktopRedo={handleDesktopRedo}
                     handleCompleteConnection={handleCompleteConnection}
                     handleStartConnection={handleStartConnection}
+                    onOpenAutomationStudio={handleOpenAutomationForArtifact}
                     handleLaunchAgency={handleLaunchAgency}
                     updateRecentGenerations={updateRecentGenerations}
                     toast={toast}
